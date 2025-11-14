@@ -1,0 +1,73 @@
+# Unified project configuration (single source of truth)
+data:
+  raw_path: data/raw/scryfall.json
+  processed_dir: data/processed
+  language: "en"
+  seq_len: 512
+  layouts_allowed: ["normal"]
+  exclude_complex_layouts: true
+  special_tokens:
+    - "<|startofcard|>"
+    - "<|gen_card|>"
+    - "<|endofcard|>"
+
+constants:
+  rarities: ["common", "uncommon", "rare", "mythic"]
+  types: ["Creature", "Instant", "Sorcery", "Enchantment", "Artifact", "Planeswalker", "Land"]
+  colors: ["W", "U", "B", "R", "G"]
+  regex:
+    mana_pattern: "^(\\{([WUBRG]|[0-9]+|X|[WUBRG]/[WUBRG])\\})+$"
+    pt_pattern: "^[0-9X]+\\/[0-9X]+$"
+
+validator:
+  enforce_field_order: true
+  require_eos: true
+  forbid_pt_without_creature: true
+  color_mana_subset_rule: true
+
+training:
+  gpt2:
+    model_name: "gpt2-large"
+    mode: "full"
+    lr_full: 2e-5
+    lr_lora: 1e-4
+    lora_r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    epochs: 3
+    warmup_ratio: 0.02
+    batch_eff: 64
+    gradient_checkpointing: false
+    weight_decay: 0.01
+  mistral:
+    model_name: "mistralai/Mistral-7B-v0.1"
+    quant: "nf4"
+    lora_r: 32
+    lora_alpha: 32
+    lora_dropout: 0.05
+    lr: 1e-4
+    epochs: 2
+    warmup_ratio: 0.02
+    batch_eff: 64
+    grad_checkpointing: true
+    weight_decay: 0.01
+
+generation:
+  temperature: 0.8
+  top_p: 0.9
+  repetition_penalty: 1.1
+  max_new_tokens: 160
+  eos_token: "<|endofcard|>"
+  num_samples: 1500
+
+curation:
+  target_counts:
+    rarity: {common: 60, uncommon: 30, rare: 9, mythic: 1}
+  balance_by: ["color", "type", "rarity"]
+  dedup_threshold: 0.2 # 0.1 più permissivo; soglia di “distanza normalizzata” che usiamo in curation per evitare quasi-duplicati tra le carte generate
+
+wandb:
+  enabled: true            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
+  project: "magic_deck_generator"       # nome del progetto su W&B (usalo come “cartella” che raggruppa i run)
+  entity: "angelo_milella@yahoo.it"    # tuo username W&B o nome del team/organization (es. "mario_rossi" o "my-lab")
+  run_name_prefix: "exp"   # prefisso per i nomi dei run; il codice può aggiungere timestamp/param per un nome unico
