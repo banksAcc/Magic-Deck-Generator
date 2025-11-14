@@ -28,12 +28,7 @@ mtg-mha/
 │     └─ keywords.json
 │
 ├─ configs/
-│  ├─ data.yaml
-│  ├─ gpt2.yaml
-│  ├─ mistral.yaml
-│  ├─ gen.yaml
-│  ├─ curate.yaml
-│  └─ wandb.yaml
+│  └─ config.yaml #general file of config with all important configuration info 
 │
 ├─ outputs/
 │  ├─ checkpoints/
