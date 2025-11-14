@@ -1,0 +1,337 @@
+GUIDA OPERATIVA “BIBBIA DI PROGETTO”
+Conditional Card Generation — MTG × MHA (Universitario / Sperimentazione)
+
+Scopo e principi
+----------------
+Costruire una pipeline end‑to‑end per fine‑tuning e generazione condizionata di carte in stile MTG usando un modello decoder‑only.
+Target: set curato finale da ≥ 100 carte “pulite” e plausibili; metrica quantitativa Perplexity; valutazione qualitativa leggera.
+Approccio studentesco: massima spiegabilità, semplicità prima dell’ottimizzazione estrema, esperimenti riproducibili.
+
+Decisioni NON negoziabili (per questa iterazione)
+--------------------------------------------------
+- **Lingua**: training/generazione in **inglese**. Eventuale traduzione IT solo per la review umana (name/text/flavor).
+- **Ragionamento in token**: budget e progressi in **token totali**, non solo #carte.
+- **Dati**: ignoriamo **ristampe**/reprints come problema; manteniamo le cose semplici.
+- **Layout carte**: **escludiamo** DFC/Adventure/Saga/flip/split. Teniamo solo layout “normali”.
+- **Formato**: struttura **rigida e pulita** (schema Standard) + poche regex “dure”.
+- **Distribuzioni**: l’analisi distribuzionale e i grafici arrivano **dopo** la selezione delle ~100 carte nette.
+- **Ablation**: **non** focalizzante in questa fase (solo il minimo indispensabile).
+- **Parser**: **rigido** (fail‑fast) per aumentare pass‑rate e qualità del set.
+- **Leakage**: tolleriamo **un po’** di contaminazione tra split; Perplexity letta come **indicativa** (non “benchmark industriale”).
+- **Tracking**: **Weights & Biases** (W&B), logging essenziale.
+
+Repo, paths e convenzioni
+-------------------------
+Struttura minimal ma modulare:
+  mtg-mha/
+    data/
+      raw/                 # bulk JSON Scryfall
+      processed/           # train/val/test .txt/.arrow
+    src/
+      preprocess.py        # JSON -> formato strutturato
+      split.py             # split 80/10/10 (policy semplice)
+      train_gpt2.py        # baseline (full FT / LoRA)
+      train_mistral_lora.py# Mistral 7B QLoRA
+      eval_ppl.py          # PPL globale + per cluster
+      generate.py          # conditional generation (batch)
+      validate.py          # parsing/regex controlli “duri”
+      curate.py            # ranking + bilanciamento distrib.
+      utils.py             # I/O, seed, logging W&B, ecc.
+      mapping/
+        mapping_seed.csv   # 12 voci iniziali (vedi sotto)
+        keywords.json      # sinonimi/hints lightweight
+    configs/
+      data.yaml            # sorgenti, filtri, seq_len, special tokens
+      gpt2.yaml            # FT vs LoRA + hyperparam
+      mistral.yaml         # QLoRA hyperparam
+      gen.yaml             # temperature/top_p/penalty/eos
+      curate.yaml          # target distribuzioni e limiti
+      wandb.yaml           # project/name/tags
+    outputs/
+      checkpoints/
+      generations/
+      final_set/
+    notebooks/             # EDA opzionale
+    requirements.txt
+
+Special tokens e campi chiave
+-----------------------------
+- Special tokens: `<|startofcard|>`, `<|gen_card|>`, `<|endofcard|>`
+- Campi in ordine **rigido** (Standard):
+  theme: My Hero Academia
+  character: <string>        # opzionale ma consigliato
+  color: <W|U|B|R|G|comb>    # p.es. “W R”
+  type: <TypeLine>           # es. “Legendary Creature | Hero”
+  rarity: <common|uncommon|rare|mythic>
+  <|gen_card|>
+  name: <string>
+  mana_cost: <mana>          # regex “dura” (vedi sotto)
+  text: <string>             # oracle-like; parentesi ok
+  pt: <P/T>                  # SOLO se type contiene “Creature”
+- EOS: `<|endofcard|>` (obbligatorio).
+
+Regex e vincoli “duri” (validator)
+----------------------------------
+- `mana_cost`: `^(\{([WUBRG]|[0-9X]|[0-9]+|[WUBRG]/[WUBRG])\})+$`
+- `pt`: `^[0-9X]+\/[0-9X]+$` (consentiamo X)
+- `rarity`: in set {common, uncommon, rare, mythic}
+- `type`: deve contenere almeno un macro‑tipo valido (Creature/Instant/Sorcery/Enchantment/Artifact/Planeswalker/Land)
+- `pt` è **vietato** se non c’è `Creature` nella type line
+- `color` coerente con `mana_cost`: se `color` non include `U`, allora `mana_cost` **non** può contenere `{U}` (stessa logica per W/B/R/G)
+- Tutti i campi obbligatori devono apparire **una sola volta** e nell’ordine definito
+- Deve esistere `<|endofcard|>` come EOS
+
+Budget compute e token (indicazioni pratiche)
+---------------------------------------------
+- GPT‑2 Large baseline (FT & LoRA): ~10–20M token (2–3 epoche). Smoke test: 1–2M token.
+- Mistral 7B QLoRA: ~20–40M token (1–2 epoche effettive) con grad‑accum per batch eff. 64–128.
+- Seq len iniziale: **512** (si valuterà 1024 solo se serve).
+
+Metriche richieste (minimo sindacale)
+-------------------------------------
+- **Perplexity** (cross‑entropy exp) su **test** (leggermente contaminato: accettato). Reportare anche PPL per **cluster**:
+  - per **type**: Creature/Instant/Sorcery/Enchantment/Artifact/Planeswalker/Land
+  - per **color**: mono, bicolori comuni, 3+ raggruppati
+  - per **rarity**: common/uncommon/rare/mythic
+- **Parse‑pass‑rate**: % carte generate che passano il validator “duro”.
+
+Seed per Thematic Mapping (semi/manuale, chiaro)
+------------------------------------------------
+Formato CSV (prima riga header):
+  character_or_faction,color_id,default_type,rarity_hint,mechanics_hints,notes
+Esempi (12 voci iniziali):
+  Pro Heroes,W U,Enchantment | Team,rare,"vigilance; protection; detain","ordine e coordinamento"
+  U.A. Class 1-A,W G,Enchantment | Class,uncommon,"+1/+1 counters; support","cooperazione e crescita"
+  All Might,W R,Legendary Creature | Hero,mythic,"vigilance; anthem; pump","simbolo della pace"
+  Izuku Midoriya,W G,Legendary Creature | Student Hero,rare,"+1/+1 counters; growth; resolve","crescita controllata"
+  Katsuki Bakugo,R B,Legendary Creature | Student Hero,rare,"burn; menace; sacrifice","esplosioni, aggressività"
+  Shoto Todoroki,U R,Legendary Creature | Student Hero,rare,"tap/freeze; burn; modal","doppio elemento"
+  Ochaco Uraraka,W U,Legendary Creature | Student Hero,uncommon,"bounce; tap/untap; support","manipolazione gravità"
+  Tenya Iida,W U,Legendary Creature | Student Hero,uncommon,"vigilance; tempo‑boost; order","velocità “regolata”"
+  Shota Aizawa (Eraser Head),U B,Legendary Creature | Pro Hero,rare,"silence/stop abilities; discard; counter","annulla poteri"
+  League of Villains,B R,Enchantment | Faction,rare,"sacrifice; menace; recursion","caos e violenza"
+  Tomura Shigaraki,B,Legendary Creature | Villain,rare,"decay; sacrifice; -1/-1 counters","corruzione e logorio"
+  Dabi,R B,Legendary Creature | Villain,rare,"burn over time; self‑damage; recursion","fiamme blu"
+
+Uso nella Conditional Generation
+--------------------------------
+Prompt (prefisso di controllo) + zona generativa:
+  <|startofcard|>
+  theme: My Hero Academia
+  character: All Might
+  color: W R
+  type: Legendary Creature | Hero
+  rarity: mythic
+  <|gen_card|>
+  name: ...
+  mana_cost: ...
+  text: ...
+  pt: 5/5
+  <|endofcard|>
+Note:
+- I campi **prima** di `<|gen_card|>` sono “istruzioni” (condizioni).
+- Il modello completa i campi “umani”. È lecito **pre‑riempire** anche `mana_cost`/`pt` se vuoi bloccarli.
+
+Decoding consigliato (standard, semplice)
+-----------------------------------------
+- temperature = 0.8
+- top_p = 0.9
+- repetition_penalty = 1.1
+- max_new_tokens = 160
+- eos_token = `<|endofcard|>`
+- seme random fisso per riproducibilità
+
+Curation: volumi e obiettivo finale (100 carte)
+-----------------------------------------------
+- Volume lordo per ciclo: **1.000–2.000** generazioni totali (mix di condizioni).
+- Atteso pass‑rate validator: 40–60% (dipende dal modello). Con 1.500 lorde otteniamo 600–900 nette parse‑able.
+- **Selezione finale 100**: ranking semplice (Syntax ok > Coerenza colore > LM‑score; dedup su `name+text`), poi **bilanciamento** delle distribuzioni (colori/tipi/rarità) derivate dal **train**.
+- Analisi distribuzioni e grafici **dopo** avere il set netto da 100.
+
+Valutazione qualitativa (leggera ma utile)
+------------------------------------------
+Schema 0–3 per carta (solo su un campione, es. 50–100):
+- Syntax/Clarity
+- Theme‑Fit (aderenza al controllo)
+- Mechanical Sanity (no assurdità formali)
+- Novelty (non ripetitiva)
+- Balance‑Rough (se te la senti)
+Output: media per criterio + 5 esempi “top” e 5 “fallati” (per il report).
+
+W&B: logging essenziale
+-----------------------
+- run: name, model (gpt2l_full / gpt2l_lora / mistral7b_qLoRA), seq_len, token_budget
+- train: step, loss, lr, grad_norm (opzionale), tokens_seen
+- val: loss, ppl, ppl_by_type/color/rarity
+- gen: pass_rate, #valid, #invalid, examples (max 3)
+- curation: distribution_match score (o distanza KL) e counts finali
+
+STEP OPERATIVI (con “Done when” e artefatti)
+--------------------------------------------
+
+0) Ambiente
+   - Azioni: creare venv, installare requirements.txt, configurare W&B (env var).
+   - Done when: `python -c "import torch, transformers"` ok; W&B vede un run di prova.
+   - Artefatti: requirements.txt, wandb.yaml.
+
+1) Raccolta dati (Scryfall bulk)
+   - Azioni: scaricare bulk JSON (English), salvare in `data/raw/`. Escludere layout non “normali”.
+   - Done when: `data/raw/scryfall.json` presente + check dimensioni.
+   - Artefatti: report breve (righe, % esclusi).
+
+2) Preprocessing → formato strutturato
+   - Azioni: `preprocess.py` legge JSON, filtra, normalizza (mana, type line), costruisce record nel formato Standard.
+   - Done when: `data/processed/all.txt` con 1 card/blocco e special tokens corretti.
+   - Artefatti: log #carte valide, #scartate, esempi 3 carte.
+
+3) Split 80/10/10 (policy semplice, leakage tollerato)
+   - Azioni: `split.py` random stratificato su rarity (minimo), evita **solo** duplicati identici 1:1.
+   - Done when: `train.txt`, `val.txt`, `test.txt` creati con conteggi e stratificazione basilare.
+   - Artefatti: summary con counts per type/color/rarity (facoltativo).
+
+4) Tokenizer & special tokens
+   - Azioni: caricare tokenizer base, **aggiungere** special tokens; verificare che il 99% dei record stia ≤ 512 token.
+   - Done when: stats su lunghezze salvate; mapping ID dei token speciali stampato.
+   - Artefatti: `configs/data.yaml` aggiornato con special tokens e seq_len.
+
+5) Baseline GPT‑2 Large (FT **e** LoRA)
+   - Azioni: `train_gpt2.py` con switch `mode: full|lora` da YAML.
+   - Hyperparam: FT lr=2e-5; LoRA r=16 α=32 dropout=0.05 lr=1e-4; epochs=2–3; warmup 2%.
+   - Done when: checkpoint salvato (FT e/o adapter LoRA) + PPL val.
+   - Artefatti: `outputs/checkpoints/gpt2l_*`, W&B run.
+
+6) Mistral 7B QLoRA (principale)
+   - Azioni: `train_mistral_lora.py`, quant 4‑bit (nf4), grad‑accum per eff. batch 64–128, checkpointing.
+   - Hyperparam: r=32 α=32 dropout=0.05 lr=1e‑4 epochs=1–2 (early stop).
+   - Done when: adapter salvato + PPL val/test.
+   - Artefatti: `outputs/checkpoints/mistral7b_qLoRA`, W&B run.
+
+7) PPL (globale e cluster)
+   - Azioni: `eval_ppl.py` su test.txt; cluster per type/color/rarity (semplice grouping by prefix).
+   - Done when: CSV con ppl_global e ppl_by_cluster.
+   - Artefatti: `outputs/ppl_summary.csv`, grafico opzionale.
+
+8) Thematic Mapping seed + keywords
+   - Azioni: scrivere `mapping/mapping_seed.csv` (12 righe fornite) e `keywords.json` (liste brevi per hints).
+   - Done when: file validi e caricabili; 1 generazione di prova condizionata per 2 entry.
+   - Artefatti: mapping_seed.csv, keywords.json, esempi 2 carte.
+
+9) Generazione condizionata (batch)
+   - Azioni: `generate.py` legge mapping + `gen.yaml`, crea prompt e genera N=1000–2000 carte lorde.
+   - Decoding: temp 0.8; top_p 0.9; rep_pen 1.1; max_new_tokens 160; eos.
+   - Done when: `outputs/generations/batch_*.txt` creato.
+   - Artefatti: log #generate, tempo medio/card.
+
+10) Validazione “dura” e parsing
+   - Azioni: `validate.py` applica regex/vincoli; produce JSONL con flag errori/categoria.
+   - Done when: `outputs/generations/batch_*_validated.jsonl` con `valid=True/False`.
+   - Artefatti: stats pass-rate e istogramma errori (opzionale).
+
+11) Scoring e ranking (minimal)
+   - Azioni: score = Syntax(1/0) + ColorCoherence(1/0) + LM‑score (neg‑logprob opzionale) + Diversity leggero (dedup).
+   - Done when: file ordinato per score con top‑K candidati.
+   - Artefatti: `outputs/generations/batch_*_scored.jsonl`.
+
+12) Curation & bilanciamento → set finale 100
+   - Azioni: greedy: scorrere lo score e **accettare** carte finché i target per color/type/rarity (da train) sono soddisfatti.
+   - Dedup su `name+text` (Levenshtein semplice).
+   - Done when: `outputs/final_set/final_100.json` (o .txt) creato.
+   - Artefatti: `final_100.*`, distribuzioni finali (tabella).
+
+13) Valutazione qualitativa (campione)
+   - Azioni: 0–3 su 4–5 criteri (vedi sopra) su 50–100 carte.
+   - Done when: `outputs/final_set/qual_eval.csv` con medie per criterio.
+   - Artefatti: esempi top/fallati.
+
+14) Report minimale (per l’orale)
+   - Azioni: markdown con: schema dati, training sintetico, PPL globale/cluster, pass‑rate, set finale, 10 esempi, note su leakage.
+   - Done when: `outputs/report/report.md` + 5 figure (facoltative).
+   - Artefatti: report.md + immagini.
+
+Configurazioni (chiavi essenziali)
+----------------------------------
+configs/data.yaml
+  raw_path: data/raw/scryfall.json
+  processed_dir: data/processed/
+  seq_len: 512
+  special_tokens: ["<|startofcard|>", "<|gen_card|>", "<|endofcard|>"]
+  layouts_allowed: ["normal"]
+  exclude_complex_layouts: true
+  language: "en"
+
+configs/gpt2.yaml
+  mode: "full"   # "full" | "lora"
+  lr_full: 2e-5
+  lr_lora: 1e-4
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  epochs: 3
+  warmup_ratio: 0.02
+  batch_eff: 64
+
+configs/mistral.yaml
+  quant: "nf4"
+  lora_r: 32
+  lora_alpha: 32
+  lora_dropout: 0.05
+  lr: 1e-4
+  epochs: 2
+  warmup_ratio: 0.02
+  batch_eff: 64
+  grad_checkpointing: true
+
+configs/gen.yaml
+  temperature: 0.8
+  top_p: 0.9
+  repetition_penalty: 1.1
+  max_new_tokens: 160
+  eos_token: "<|endofcard|>"
+  num_samples: 1500
+
+configs/curate.yaml
+  target_counts:
+    rarity: {common: 60, uncommon: 30, rare: 9, mythic: 1}
+  balance_by: ["color", "type", "rarity"]
+  dedup_threshold: 0.2   # distanza normalizzata su name+text
+
+configs/wandb.yaml
+  project: "mtg-mha"
+  entity: "<your_wandb_entity>"
+  run_name_prefix: "exp"
+
+Glossario EN→IT (per eventuale traduzione name/text/flavor)
+-----------------------------------------------------------
+haste=rapidità; vigilance=vigilanza; lifelink=legame vitale; trample=travolgere;
+flying=volare; deathtouch=tocco letale; hexproof=antimalocchio; first strike=attacco improvviso;
+draw a card=peschi una carta; counter target spell=neutralizza magia bersaglio; exile=esilia;
+sacrifice=sacrifica; token=pedina; +1/+1 counter=segnalino +1/+1.
+
+Rischi (e cosa fare se accadono)
+--------------------------------
+- PPL altissima o instabile: riduci lr / aumenta warmup / abbassa seq_len a 384 / aumenta token budget.
+- Pass‑rate basso: rinforza regex, aggiungi esempi di training con formato modello, semplifica hints mechanics.
+- Troppe carte uguali: alza dedup, varia i prompt, aumenta diversità nel mapping.
+- Carte “rotte”: aggiungi regole “dure” (es. ban di certi pattern) o filtri di testo.
+
+Checklist “pronta all’uso”
+--------------------------
+1) Setup env + W&B → OK
+2) Scarica bulk JSON → data/raw/ → OK
+3) `preprocess.py` → all.txt → OK
+4) `split.py` → train/val/test → OK
+5) Tokenizer + special tokens → stat lunghezze → OK
+6) `train_gpt2.py` (full & lora) → checkpoints + PPL → OK
+7) `train_mistral_lora.py` → adapter + PPL → OK
+8) `eval_ppl.py` (glob+cluster) → ppl_summary.csv → OK
+9) `mapping_seed.csv` + keywords.json → OK
+10) `generate.py` (1500) → batch.txt → OK
+11) `validate.py` → validated.jsonl + pass-rate → OK
+12) `curate.py` → final_100.json + distribuzioni → OK
+13) Qual eval → qual_eval.csv → OK
+14) Report.md + esempi → OK
+
+NOTE su leakage (trasparenza minima)
+------------------------------------
+- Lo split non è “industriale”: è accettato un po’ di contaminazione. La PPL è **indicativa**.
+- Il valore didattico resta: pipeline chiara, controlli formali, conditional generation funzionante, set finale plausibile.
