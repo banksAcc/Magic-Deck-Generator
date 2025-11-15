@@ -10,6 +10,11 @@ data:
     - "<|startofcard|>"
     - "<|gen_card|>"
     - "<|endofcard|>"
+  split:
+    train_ratio: 0.8
+    val_ratio: 0.1
+    dedup_exact: true    # rimozione duplicati 1:1
+    shuffle_before_split: true  # quasi sicuramente sì
 
 constants:
   rarities: ["common", "uncommon", "rare", "mythic"]
