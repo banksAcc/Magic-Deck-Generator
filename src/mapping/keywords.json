@@ -1,0 +1,70 @@
+[
+  {
+    "id": "midoriya_growth",
+    "colors": ["G"],
+    "any_text": [
+      "+1/+1 counter",
+      "put a +1/+1 counter",
+      "enters the battlefield with a +1/+1 counter"
+    ],
+    "theme": "U.A. Students",
+    "character": "Izuku Midoriya"
+  },
+  {
+    "id": "bakugo_burn",
+    "colors": ["R"],
+    "any_text": [
+      "deals damage to any target",
+      "deals 3 damage",
+      "damage to any target",
+      "can't block"
+    ],
+    "theme": "U.A. Students",
+    "character": "Katsuki Bakugo"
+  },
+  {
+    "id": "todoroki_ice_fire",
+    "colors": ["U", "R"],
+    "any_text": [
+      "tap target creature",
+      "doesn't untap",
+      "deals damage"
+    ],
+    "theme": "U.A. Students",
+    "character": "Shoto Todoroki"
+  },
+  {
+    "id": "allmight_buff",
+    "colors": ["W"],
+    "any_text": [
+      "creatures you control get",
+      "indestructible",
+      "prevent all combat damage",
+      "prevent all damage"
+    ],
+    "theme": "Pro Heroes",
+    "character": "All Might"
+  },
+  {
+    "id": "shigaraki_sacrifice",
+    "colors": ["B"],
+    "any_text": [
+      "sacrifice a creature",
+      "each opponent sacrifices",
+      "destroy target creature"
+    ],
+    "theme": "League of Villains",
+    "character": "Tomura Shigaraki"
+  },
+  {
+    "id": "aizawa_control",
+    "colors": ["U", "B"],
+    "any_text": [
+      "counter target spell",
+      "can't activate abilities",
+      "tap target creature"
+    ],
+    "theme": "Pro Heroes",
+    "character": "Shota Aizawa"
+  }
+]

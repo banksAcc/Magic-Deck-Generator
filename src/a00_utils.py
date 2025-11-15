@@ -19,6 +19,10 @@ from __future__ import annotations
 
 import os
 import re
+import csv
+import json
+from pathlib import Path
+
 from typing import Any, Dict, Optional, Pattern, Set, List
 
 # --- Import opzionale per W&B (non obbligatorio all'avvio) ---
@@ -61,6 +65,38 @@ def get_special_tokens(cfg: Dict[str, Any]) -> List[str]:
             seen.add(t)
     return out
 
+def load_mapping_seed(path: str):
+    path = Path(path)
+    seed_by_name = {}
+    seed_by_oracle_id = {}
+
+    if not path.exists():
+        return seed_by_name, seed_by_oracle_id
+
+    with path.open("r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            name = row.get("card_name")
+            oracle_id = row.get("oracle_id")
+            theme = row.get("theme")
+            character = row.get("character")
+
+            if name:
+                seed_by_name[name.lower()] = (theme, character)
+            if oracle_id:
+                seed_by_oracle_id[oracle_id] = (theme, character)
+
+    return seed_by_name, seed_by_oracle_id
+
+
+def load_keyword_rules(path: str):
+    path = Path(path)
+    if not path.exists():
+        return []
+
+    with path.open("r", encoding="utf-8") as f:
+        rules = json.load(f)
+    return rules
 
 # ---------------------------------------------------------------------
 # Weights & Biases
@@ -139,3 +175,77 @@ def write_text(path: str, s: str) -> None:
 def read_lines(path: str) -> List[str]:
     with open(path, "r", encoding="utf-8") as f:
         return [line.rstrip("\n") for line in f]
+
+
+# ---------------------------------------------------------------------
+# mapper
+# ---------------------------------------------------------------------
+class MhaMapper:
+    def __init__(self, cfg):
+        mapping_cfg = cfg.get("mapping", {})
+        self.enabled = mapping_cfg.get("enabled", False)
+        self.default_theme = mapping_cfg.get("default_theme", "Generic")
+        self.default_character = mapping_cfg.get("default_character", "N/A")
+
+        if not self.enabled:
+            self.seed_by_name = {}
+            self.seed_by_oracle_id = {}
+            self.rules = []
+            return
+
+        seed_path = mapping_cfg.get("seed_path")
+        keywords_path = mapping_cfg.get("keywords_path")
+
+        self.seed_by_name, self.seed_by_oracle_id = load_mapping_seed(seed_path)
+        self.rules = load_keyword_rules(keywords_path)
+
+    def __call__(self, card: dict):
+        """
+        card è l’oggetto Scryfall completo.
+        Ritorna (theme, character)
+        """
+        if not self.enabled:
+            return self.default_theme, self.default_character
+
+        # 1) match diretto da mapping_seed (più forte)
+        name = card.get("name", "").lower()
+        oracle_id = card.get("oracle_id")
+
+        if name in self.seed_by_name:
+            return self.seed_by_name[name]
+
+        if oracle_id in self.seed_by_oracle_id:
+            return self.seed_by_oracle_id[oracle_id]
+
+        # 2) regole basate su keywords (heuristiche)
+        theme, character = self._apply_keyword_rules(card)
+        if theme is not None or character is not None:
+            return (
+                theme if theme is not None else self.default_theme,
+                character if character is not None else self.default_character,
+            )
+
+        # 3) fallback
+        return self.default_theme, self.default_character
+
+    def _apply_keyword_rules(self, card: dict):
+        text = (card.get("oracle_text") or "").lower()
+        type_line = (card.get("type_line") or "").lower()
+        colors = "".join(card.get("color_identity") or [])
+        # qui la logica dipende dalla struttura di keywords.json
+
+        for rule in self.rules:
+            # es: { "id": "bakugo_rule", "colors": ["R"], "any_text": ["damage", "attack"], "theme": "U.A. Students", "character": "Bakugo Katsuki" }
+            needed_colors = set(rule.get("colors", []))
+            any_text = [kw.lower() for kw in rule.get("any_text", [])]
+
+            if needed_colors and not needed_colors.issubset(set(colors)):
+                continue
+
+            if any_text and not any(kw in text or kw in type_line for kw in any_text):
+                continue
+
+            # se la regola è soddisfatta
+            return rule.get("theme"), rule.get("character")
+
+        return None, None

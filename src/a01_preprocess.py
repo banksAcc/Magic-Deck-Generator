@@ -41,7 +41,7 @@ import re
 from collections import Counter
 from typing import Any, Dict, List
 
-from src.a00_utils import load_config, get_special_tokens, init_wandb
+from src.a00_utils import load_config, get_special_tokens, init_wandb, MhaMapper
 
 
 # --------------------------
@@ -137,6 +137,8 @@ def _has_essentials(card: Dict[str, Any]) -> bool:
 # --------------------------
 def _format_block(
     special_tokens: List[str],
+    theme: str,
+    character: str,
     color: str,
     type_line: str,
     rarity: str,
@@ -147,13 +149,13 @@ def _format_block(
 ) -> str:
     """
     Compone il blocco testuale con i 3 token speciali.
-    "theme" e "character" sono placeholder fissi per mantenere lo schema.
+    "theme" e "character" ora sono parametri, non più hard-coded.
     """
     start_tok, gen_tok, end_tok = special_tokens  # assumiamo i 3 token in quest’ordine
     lines = [
         start_tok,
-        "theme: Generic",
-        "character: N/A",
+        f"theme: {theme}",
+        f"character: {character}",
         f"color: {color}".rstrip(),
         f"type: {type_line}",
         f"rarity: {rarity}",
@@ -167,7 +169,6 @@ def _format_block(
     lines.append(end_tok)
     return "\n".join(lines) + "\n"
 
-
 # --------------------------
 # Main
 # --------------------------
@@ -178,6 +179,10 @@ def main() -> None:
 
     cfg = load_config(args.config)
     data_cfg = cfg.get("data", {})
+
+    # Mapper Magic -> (theme, character) per MHA (può essere disabilitato da config)
+    mapper = MhaMapper(cfg)
+
     allowed_layouts = data_cfg.get("layouts_allowed", ["normal"])
     lang = data_cfg.get("language", "en")
 
@@ -236,9 +241,14 @@ def main() -> None:
             text = _oracle_text(card)
             pt_line = _pt_line_if_creature(card, type_line)
 
+            # Mapping Magic -> (theme, character) (se abilitato nel config)
+            theme, character = mapper(card)
+
             # Componi blocco e scrivi
             block = _format_block(
                 special_tokens=special_tokens,
+                theme=theme,
+                character=character,
                 color=color,
                 type_line=type_line,
                 rarity=rarity,
@@ -247,6 +257,8 @@ def main() -> None:
                 text=text,
                 pt_line=pt_line,
             )
+
+            
             fout.write(block)
             kept += 1
 

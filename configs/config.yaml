@@ -24,6 +24,13 @@ constants:
     mana_pattern: "^(\\{([WUBRG]|[0-9]+|X|[WUBRG]/[WUBRG])\\})+$"
     pt_pattern: "^[0-9X]+\\/[0-9X]+$"
 
+mapping:
+  enabled: true
+  seed_path: "src/mapping/mapping_seed.csv"
+  keywords_path: "src/mapping/keywords.json"
+  default_theme: "Generic"
+  default_character: "N/A"
+
 validator:
   enforce_field_order: true
   require_eos: true
@@ -74,7 +81,6 @@ curation:
   dedup_threshold: 0.2 # 0.1 più permissivo; soglia di “distanza normalizzata” che usiamo in curation per evitare quasi-duplicati tra le carte generate
 
 wandb:
-  enabled: true            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
+  enabled: false            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
   project: "magic_deck_generator"       # nome del progetto su W&B (usalo come “cartella” che raggruppa i run)
-  entity: "angelo_milella@yahoo.it"    # tuo username W&B o nome del team/organization (es. "mario_rossi" o "my-lab")
   run_name_prefix: "exp"   # prefisso per i nomi dei run; il codice può aggiungere timestamp/param per un nome unico
