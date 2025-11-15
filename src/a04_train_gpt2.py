@@ -5,12 +5,15 @@ a04_train_gpt2.py
 Baseline training GPT-2 per MTG×MHA (config-driven).
 
 - Legge config unificato (configs/config.yaml) via a00_utils.load_config.
-- Usa i file di split standard: data/processed/train.txt e val.txt.
-- Ogni carta è un esempio: un blocco intero (header + <|gen_card|> + parte generata).
+- Usa SEMPRE i file validati:
+    data/processed/train_validated.jsonl
+    data/processed/val_validated.jsonl
+  prodotti da a03_validate, e usa solo i record con "valid": true.
+- Ogni carta è un esempio: un blocco intero (raw) con header + <|gen_card|> + parte generata.
 - Applica i limiti da config.training:
-    - max_train_examples / max_val_examples
-    - train_subset_fraction / val_subset_fraction
-  con priorità: max_* > *_subset_fraction > tutto il dataset.
+    - max_train_examples / max_val_examples (limiti assoluti)
+    - subset_fraction (unica frazione per tutti i set; se presente, si applica a train/val)
+  con priorità: max_* > subset_fraction > tutto il dataset.
 - Costruisce tokenizer e modello GPT-2:
     - base_model_name da training.base_model_name (default: gpt2-large).
     - aggiunge i special tokens del progetto (cfg.data.special_tokens).
@@ -26,6 +29,7 @@ Esecuzione tipica (dal root della repo):
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 from pathlib import Path
@@ -66,33 +70,45 @@ def parse_args() -> argparse.Namespace:
 
 
 # ---------------------------------------------------------------------------
-# Lettura blocchi
+# Lettura blocchi da *_validated.jsonl
 # ---------------------------------------------------------------------------
 
-def read_blocks(path: Path, start_token: str) -> List[Block]:
+def read_validated_blocks(path: Path, logger: logging.Logger) -> List[Block]:
     """
-    Legge un file .txt (train/val) e lo spezza in blocchi carta,
-    usando una riga contenente SOLO `start_token` come delimitatore.
+    Legge un file *.jsonl prodotto dal validator (train_validated.jsonl, val_validated.jsonl, ...),
+    e ritorna una lista di blocchi di testo (field 'raw').
 
-    Il blocco include il `start_token` in testa.
+    - Usa solo i record con "valid": true.
+    - Ignora eventuali record senza 'raw' valido.
     """
     if not path.is_file():
-        raise FileNotFoundError(f"File non trovato: {path}")
+        raise FileNotFoundError(f"File JSONL non trovato: {path}")
 
     blocks: List[Block] = []
-    current_lines: List[str] = []
+    total_records = 0
+    used_records = 0
 
     with path.open("r", encoding="utf-8") as f:
         for line in f:
-            if line.strip() == start_token:
-                if current_lines:
-                    blocks.append("".join(current_lines))
-                    current_lines = []
-            current_lines.append(line)
+            line = line.strip()
+            if not line:
+                continue
 
-    if current_lines:
-        blocks.append("".join(current_lines))
+            total_records += 1
+            rec = json.loads(line)
 
+            if not rec.get("valid", False):
+                continue
+
+            raw = rec.get("raw", None)
+            if isinstance(raw, str) and raw.strip():
+                blocks.append(raw)
+                used_records += 1
+
+    logger.info(
+        f"{path.name}: record totali={total_records}, "
+        f"validi usati={used_records}, scartati={total_records - used_records}"
+    )
     return blocks
 
 
@@ -135,7 +151,7 @@ class CardDataset(Dataset):
 
 
 # ---------------------------------------------------------------------------
-# Subset logic (max_* + *_subset_fraction)
+# Subset logic (max_* + subset_fraction)
 # ---------------------------------------------------------------------------
 
 def maybe_limit_blocks(
@@ -147,7 +163,8 @@ def maybe_limit_blocks(
     logger: logging.Logger,
 ) -> List[Block]:
     """
-    Applica la logica di subset:
+    Applica la logica di subset per un singolo split (train/val):
+
       - se max_examples non è None: usa al massimo max_examples blocchi
       - altrimenti, se subset_fraction non è None: usa quella frazione
       - altrimenti: usa tutti i blocchi
@@ -156,8 +173,10 @@ def maybe_limit_blocks(
     """
     n = len(blocks)
     if n == 0:
+        logger.warning(f"{label}: dataset vuoto prima del subset.")
         return blocks
 
+    # Limite assoluto ha priorità
     if max_examples is not None:
         max_examples = int(max_examples)
         if max_examples < n:
@@ -167,6 +186,7 @@ def maybe_limit_blocks(
             logger.info(f"{label}: max_examples >= dataset, uso tutti i {n} esempi.")
             return blocks
 
+    # Frazione globale (uguale per tutti i set)
     if subset_fraction is not None:
         frac = float(subset_fraction)
         if not (0.0 < frac <= 1.0):
@@ -204,20 +224,18 @@ def main() -> None:
     wandb_cfg = cfg.get("wandb", {})
 
     processed_dir = Path(data_cfg.get("processed_dir", "data/processed")).resolve()
-    train_path = processed_dir / "train.txt"
-    val_path = processed_dir / "val.txt"
+    train_jsonl = processed_dir / "train_validated.jsonl"
+    val_jsonl = processed_dir / "val_validated.jsonl"
 
     seq_len = int(data_cfg.get("seq_len", 512))
 
     special_tokens = get_special_tokens(cfg)
-    start_token = special_tokens[0] if special_tokens else "<|startofcard|>"
-
     logger.info(f"Config: {args.config}")
     logger.info(f"Processed dir: {processed_dir}")
-    logger.info(f"Train path: {train_path}")
-    logger.info(f"Val path:   {val_path}")
-    logger.info(f"Seq len:    {seq_len}")
-    logger.info(f"Start token: {start_token}")
+    logger.info(f"Train JSONL:  {train_jsonl}")
+    logger.info(f"Val JSONL:    {val_jsonl}")
+    logger.info(f"Seq len:      {seq_len}")
+    logger.info(f"Special tokens (da config): {special_tokens}")
 
     # W&B tramite HF Trainer (se abilitato)
     if wandb_cfg.get("enabled", False):
@@ -236,33 +254,32 @@ def main() -> None:
         logger.info("W&B disabilitato da config.")
 
     # ------------------------------------------------------------------ #
-    # 1) Lettura blocchi da train/val
+    # 1) Lettura blocchi da train/val VALIDATI (solo valid=True)
     # ------------------------------------------------------------------ #
-    train_blocks = read_blocks(train_path, start_token=start_token)
-    val_blocks = read_blocks(val_path, start_token=start_token)
+    train_blocks = read_validated_blocks(train_jsonl, logger=logger)
+    val_blocks = read_validated_blocks(val_jsonl, logger=logger)
 
-    logger.info(f"Train blocks (raw): {len(train_blocks)}")
-    logger.info(f"Val blocks   (raw): {len(val_blocks)}")
+    logger.info(f"Train blocks (raw, valid): {len(train_blocks)}")
+    logger.info(f"Val blocks   (raw, valid): {len(val_blocks)}")
 
     # ------------------------------------------------------------------ #
-    # 2) Applicazione subset (max_* e *_subset_fraction)
+    # 2) Applicazione subset (max_* e subset_fraction globale)
     # ------------------------------------------------------------------ #
     max_train_examples = training_cfg.get("max_train_examples", None)
     max_val_examples = training_cfg.get("max_val_examples", None)
-    train_subset_fraction = training_cfg.get("train_subset_fraction", None)
-    val_subset_fraction = training_cfg.get("val_subset_fraction", None)
+    subset_fraction = training_cfg.get("subset_fraction", None)
 
     train_blocks = maybe_limit_blocks(
         train_blocks,
         max_examples=max_train_examples,
-        subset_fraction=train_subset_fraction,
+        subset_fraction=subset_fraction,
         label="train",
         logger=logger,
     )
     val_blocks = maybe_limit_blocks(
         val_blocks,
         max_examples=max_val_examples,
-        subset_fraction=val_subset_fraction,
+        subset_fraction=subset_fraction,
         label="val",
         logger=logger,
     )
