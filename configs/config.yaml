@@ -56,6 +56,8 @@ training:
     batch_eff: 64
     grad_checkpointing: true
     weight_decay: 0.01
+  train_subset_fraction: 0.1   # usa solo 10% del train
+  val_subset_fraction: 0.1
 
 generation:
   temperature: 0.8
