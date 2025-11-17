@@ -51,3 +51,6 @@ python -m src.a01_preprocess --> fa il pre-process dei dati, elimina carte errat
 python -m src.a02_split --> splitta i dati iniziali (del dataset precedente) e li inserisce in 3 file seprarati. Fa anche una eliminazione di record duplicati, se attiva nel file di configurazione
 
 python -m src.a03_validate --> valida che i file creati per i 3 task del modello siano coerenti alla struttura stabilita e decisa per il sistema. Va a creare i file .jsonl per ogniuno dei 3 split creati
+
+
+python -m src.a04_train_gpt2

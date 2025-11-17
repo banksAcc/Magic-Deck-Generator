@@ -214,4 +214,7 @@ __marimo__/
 scryfall.json
 
 #non commitiamo i report di wandb
-wandb 
+wandb
+
+#non includiamo i pesi e i modelli nel repository git, non sono necessari e sono molto pesanti
+outputs

@@ -10,16 +10,19 @@ Baseline training GPT-2 per MTG×MHA (config-driven).
     data/processed/val_validated.jsonl
   prodotti da a03_validate, e usa solo i record con "valid": true.
 - Ogni carta è un esempio: un blocco intero (raw) con header + <|gen_card|> + parte generata.
-- Applica i limiti da config.training:
-    - max_train_examples / max_val_examples (limiti assoluti)
-    - subset_fraction (unica frazione per tutti i set; se presente, si applica a train/val)
+- Legge gli iperparametri da config.training.gpt2 (model, lr, batch, ecc.)
+  e i controlli globali da config.training (subset_fraction, eval_every, ecc.).
+- Applica i limiti:
+    - training.subset_fraction        (frazione globale per train/val)
+    - training.max_train_examples
+    - training.max_val_examples
   con priorità: max_* > subset_fraction > tutto il dataset.
 - Costruisce tokenizer e modello GPT-2:
-    - base_model_name da training.base_model_name (default: gpt2-large).
+    - model_name da training.gpt2.model_name (default: "gpt2").
     - aggiunge i special tokens del progetto (cfg.data.special_tokens).
+    - opzionale gradient checkpointing da training.gpt2.gradient_checkpointing.
 - Usa HuggingFace Trainer per il fine-tuning.
-- W&B opzionale: se wandb.enabled = true,
-  imposta le variabili d'ambiente per usare W&B via HF Trainer.
+- W&B opzionale tramite config.wandb.
 
 Esecuzione tipica (dal root della repo):
 
@@ -217,19 +220,25 @@ def main() -> None:
     )
     logger = logging.getLogger("a04_train_gpt2")
 
-    # Config
+    # ------------------------------------------------------------------ #
+    # Config & paths
+    # ------------------------------------------------------------------ #
     cfg = load_config(args.config)
     data_cfg = cfg.get("data", {})
-    training_cfg = cfg.get("training", {})
+    training_root = cfg.get("training", {})   # contiene gpt2, mistral, subset_fraction, ecc.
     wandb_cfg = cfg.get("wandb", {})
+
+    gpt2_cfg = training_root.get("gpt2", {})
+    if not gpt2_cfg:
+        raise RuntimeError("Config.training.gpt2 mancante o vuota: controlla configs/config.yaml")
 
     processed_dir = Path(data_cfg.get("processed_dir", "data/processed")).resolve()
     train_jsonl = processed_dir / "train_validated.jsonl"
     val_jsonl = processed_dir / "val_validated.jsonl"
-
     seq_len = int(data_cfg.get("seq_len", 512))
 
     special_tokens = get_special_tokens(cfg)
+
     logger.info(f"Config: {args.config}")
     logger.info(f"Processed dir: {processed_dir}")
     logger.info(f"Train JSONL:  {train_jsonl}")
@@ -237,7 +246,9 @@ def main() -> None:
     logger.info(f"Seq len:      {seq_len}")
     logger.info(f"Special tokens (da config): {special_tokens}")
 
+    # ------------------------------------------------------------------ #
     # W&B tramite HF Trainer (se abilitato)
+    # ------------------------------------------------------------------ #
     if wandb_cfg.get("enabled", False):
         os.environ["WANDB_PROJECT"] = wandb_cfg.get("project", "mtg-mha")
         entity = wandb_cfg.get("entity")
@@ -263,12 +274,31 @@ def main() -> None:
     logger.info(f"Val blocks   (raw, valid): {len(val_blocks)}")
 
     # ------------------------------------------------------------------ #
-    # 2) Applicazione subset (max_* e subset_fraction globale)
+    # 2) Parametri da config.training
     # ------------------------------------------------------------------ #
-    max_train_examples = training_cfg.get("max_train_examples", None)
-    max_val_examples = training_cfg.get("max_val_examples", None)
-    subset_fraction = training_cfg.get("subset_fraction", None)
+    # livello root training
+    subset_fraction = training_root.get("subset_fraction", None)
+    max_train_examples = training_root.get("max_train_examples", None)
+    max_val_examples = training_root.get("max_val_examples", None)
+    eval_every = int(training_root.get("eval_every_n_steps", 500))
+    save_every = int(training_root.get("save_every_n_steps", 1000))
+    run_name_prefix = training_root.get("run_name_prefix", "gpt2")
+    max_steps = training_root.get("max_steps", None)
+    seed = training_root.get("seed", None)
 
+    # sottosezione gpt2
+    base_model_name = gpt2_cfg.get("model_name", "gpt2")
+    batch_size = int(gpt2_cfg.get("batch_size", 1))
+    grad_accum = int(gpt2_cfg.get("gradient_accumulation_steps", 1))
+    num_epochs = int(gpt2_cfg.get("num_epochs", 3))
+    learning_rate = float(gpt2_cfg.get("lr_full", 2e-5))
+    weight_decay = float(gpt2_cfg.get("weight_decay", 0.0))
+    warmup_ratio = gpt2_cfg.get("warmup_ratio", None)
+    warmup_steps = None  # usiamo il ratio, non i passi assoluti
+
+    # ------------------------------------------------------------------ #
+    # 3) Applicazione subset (max_* e subset_fraction globale)
+    # ------------------------------------------------------------------ #
     train_blocks = maybe_limit_blocks(
         train_blocks,
         max_examples=max_train_examples,
@@ -291,16 +321,13 @@ def main() -> None:
         raise RuntimeError("Dataset di train vuoto dopo il subset: controlla il config.training.")
 
     # ------------------------------------------------------------------ #
-    # 3) Tokenizer & modello GPT-2
+    # 4) Tokenizer & modello GPT-2
     # ------------------------------------------------------------------ #
-    base_model_name = training_cfg.get("base_model_name", "gpt2-large")
     logger.info(f"Base model: {base_model_name}")
-
     tokenizer = AutoTokenizer.from_pretrained(base_model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Aggiungiamo i token speciali del progetto (se non già nel vocab)
     additional_specials = [tok for tok in special_tokens if tok not in tokenizer.get_vocab()]
     if additional_specials:
         logger.info(f"Aggiungo {len(additional_specials)} special token al tokenizer.")
@@ -310,41 +337,34 @@ def main() -> None:
     if additional_specials:
         model.resize_token_embeddings(len(tokenizer))
 
+    # Gradient checkpointing opzionale (da config.training.gpt2.gradient_checkpointing)
+    if gpt2_cfg.get("gradient_checkpointing", False):
+        logger.info("Abilito gradient checkpointing sul modello.")
+        model.gradient_checkpointing_enable()
+
     # Seed opzionale
-    seed = training_cfg.get("seed", None)
     if seed is not None:
         seed = int(seed)
         logger.info(f"Imposto seed globale a {seed}.")
         set_seed(seed)
 
     # ------------------------------------------------------------------ #
-    # 4) Dataset & hyperparametri
+    # 5) Dataset & hyperparametri
     # ------------------------------------------------------------------ #
     train_dataset = CardDataset(train_blocks, tokenizer, seq_len)
     val_dataset = CardDataset(val_blocks, tokenizer, seq_len) if len(val_blocks) > 0 else None
 
-    batch_size = int(training_cfg.get("batch_size", 4))
-    grad_accum = int(training_cfg.get("gradient_accumulation_steps", 1))
-    num_epochs = int(training_cfg.get("num_epochs", 3))
-    learning_rate = float(training_cfg.get("learning_rate", 2e-4))
-    weight_decay = float(training_cfg.get("weight_decay", 0.0))
-    warmup_steps = training_cfg.get("warmup_steps", None)
-    warmup_ratio = training_cfg.get("warmup_ratio", None)
-    max_steps = training_cfg.get("max_steps", None)
-    eval_every = int(training_cfg.get("eval_every_n_steps", 500))
-    save_every = int(training_cfg.get("save_every_n_steps", 1000))
-
-    run_name_prefix = training_cfg.get("run_name_prefix", "gpt2")
-    run_name = f"{run_name_prefix}-gpt2"
-
-    output_dir = Path("outputs") / run_name
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     logger.info("--- Hyperparameters ---")
     logger.info(f"batch_size={batch_size}, grad_accum={grad_accum}, num_epochs={num_epochs}")
     logger.info(f"lr={learning_rate}, weight_decay={weight_decay}")
-    logger.info(f"warmup_steps={warmup_steps}, warmup_ratio={warmup_ratio}, max_steps={max_steps}")
+    logger.info(f"warmup_ratio={warmup_ratio}, max_steps={max_steps}")
+    logger.info(f"subset_fraction={subset_fraction}")
     logger.info(f"eval_every={eval_every}, save_every={save_every}")
+
+    run_name = f"{run_name_prefix}-gpt2"
+    output_dir = Path("outputs") / run_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     logger.info(f"output_dir={output_dir}")
     logger.info(f"HF Trainer report_to={report_to}")
     logger.info(f"run_name={run_name}")
@@ -352,7 +372,7 @@ def main() -> None:
     # Strategia di evaluation
     evaluation_strategy = "steps" if len(val_blocks) > 0 else "no"
 
-    # Warmup: rispettiamo la logica config (warmup_steps > warmup_ratio)
+    # Warmup: da ratio (se definito)
     if warmup_steps is not None:
         warmup_steps = int(warmup_steps)
         warmup_ratio_arg = 0.0
@@ -361,11 +381,10 @@ def main() -> None:
         warmup_ratio_arg = float(warmup_ratio) if warmup_ratio is not None else 0.0
 
     # ------------------------------------------------------------------ #
-    # 5) TrainingArguments & Trainer
+    # 6) TrainingArguments & Trainer (con fallback per versioni HF vecchie)
     # ------------------------------------------------------------------ #
-    training_args = TrainingArguments(
+    base_kwargs = dict(
         output_dir=str(output_dir),
-        run_name=run_name,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         gradient_accumulation_steps=grad_accum,
@@ -376,13 +395,27 @@ def main() -> None:
         warmup_steps=warmup_steps,
         warmup_ratio=warmup_ratio_arg,
         logging_steps=max(1, eval_every // 5),
-        evaluation_strategy=evaluation_strategy,
-        eval_steps=eval_every if evaluation_strategy == "steps" else None,
         save_steps=save_every,
         save_total_limit=3,
         report_to=report_to,
         fp16=torch.cuda.is_available(),
     )
+
+    try:
+        training_args = TrainingArguments(
+            run_name=run_name,
+            evaluation_strategy=evaluation_strategy,
+            eval_steps=eval_every if evaluation_strategy == "steps" else None,
+            **base_kwargs,
+        )
+    except TypeError as e:
+        logger.warning(
+            "TrainingArguments non supporta alcuni parametri "
+            "(probabile versione diversa di transformers). "
+            "Riprovo senza evaluation_strategy / eval_steps / run_name. "
+            f"Dettagli: {e}"
+        )
+        training_args = TrainingArguments(**base_kwargs)
 
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
@@ -398,7 +431,7 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------ #
-    # 6) Train + salvataggio
+    # 7) Train + salvataggio
     # ------------------------------------------------------------------ #
     logger.info("Inizio training GPT-2 baseline...")
     trainer.train()

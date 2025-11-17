@@ -3,7 +3,7 @@ data:
   raw_path: data/raw/scryfall.json
   processed_dir: data/processed
   language: "en"
-  seq_len: 512
+  seq_len: 384 # 512 o 256
   layouts_allowed: ["normal"]
   exclude_complex_layouts: true
   special_tokens:
@@ -38,19 +38,25 @@ validator:
   color_mana_subset_rule: true
 
 training:
+  subset_fraction: 0.1   # usa solo 10% del set di train e validation
+  eval_every_n_steps: 500
+  save_every_n_steps: 1000
+  run_name_prefix: "gpt2"
   gpt2:
-    model_name: "gpt2-large"
+    model_name: "gpt2"
     mode: "full"
     lr_full: 2e-5
     lr_lora: 1e-4
     lora_r: 16
     lora_alpha: 32
     lora_dropout: 0.05
-    epochs: 3
+    num_epochs: 3
     warmup_ratio: 0.02
     batch_eff: 64
     gradient_checkpointing: false
     weight_decay: 0.01
+    batch_size: 1
+    gradient_accumulation_steps: 4
   mistral:
     model_name: "mistralai/Mistral-7B-v0.1"
     quant: "nf4"
@@ -63,7 +69,6 @@ training:
     batch_eff: 64
     grad_checkpointing: true
     weight_decay: 0.01
-  subset_fraction: 0.1   # usa solo 10% del set di train e validation
 
 generation:
   temperature: 0.8
