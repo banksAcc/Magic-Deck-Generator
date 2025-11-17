@@ -53,4 +53,4 @@ python -m src.a02_split --> splitta i dati iniziali (del dataset precedente) e l
 python -m src.a03_validate --> valida che i file creati per i 3 task del modello siano coerenti alla struttura stabilita e decisa per il sistema. Va a creare i file .jsonl per ogniuno dei 3 split creati
 
 
-python -m src.a04_train_gpt2
+python -m src.a04_train_gpt2 --> fai il training del modello selezionato (quindi vedere in config, nella sezione modelli sotto gpt2), con il set presente in training, test validated.

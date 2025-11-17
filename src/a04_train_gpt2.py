@@ -10,23 +10,16 @@ Baseline training GPT-2 per MTG×MHA (config-driven).
     data/processed/val_validated.jsonl
   prodotti da a03_validate, e usa solo i record con "valid": true.
 - Ogni carta è un esempio: un blocco intero (raw) con header + <|gen_card|> + parte generata.
-- Legge gli iperparametri da config.training.gpt2 (model, lr, batch, ecc.)
-  e i controlli globali da config.training (subset_fraction, eval_every, ecc.).
-- Applica i limiti:
-    - training.subset_fraction        (frazione globale per train/val)
-    - training.max_train_examples
-    - training.max_val_examples
-  con priorità: max_* > subset_fraction > tutto il dataset.
-- Costruisce tokenizer e modello GPT-2:
-    - model_name da training.gpt2.model_name (default: "gpt2").
-    - aggiunge i special tokens del progetto (cfg.data.special_tokens).
-    - opzionale gradient checkpointing da training.gpt2.gradient_checkpointing.
-- Usa HuggingFace Trainer per il fine-tuning.
-- W&B opzionale tramite config.wandb.
-
-Esecuzione tipica (dal root della repo):
-
-    python -m src.a04_train_gpt2 --config configs/config.yaml
+- Iperparametri da config.training.gpt2
+    - model_name, lr_full, num_epochs, batch_size, gradient_accumulation_steps, ecc.
+- Controlli globali da config.training:
+    - subset_fraction (unica frazione per train/val)
+    - eval_every_n_steps, save_every_n_steps, run_name_prefix, seed.
+- Nessun max_train_examples / max_val_examples: si usa solo subset_fraction.
+- Usa HuggingFace Trainer con valutazione su validation:
+    - evaluation_strategy="steps"
+    - eval_steps = eval_every_n_steps
+    - trainer.evaluate() finale a fine training.
 """
 
 from __future__ import annotations
@@ -34,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 from pathlib import Path
 from typing import Dict, List, Any
@@ -154,57 +148,43 @@ class CardDataset(Dataset):
 
 
 # ---------------------------------------------------------------------------
-# Subset logic (max_* + subset_fraction)
+# Subset logic (solo subset_fraction)
 # ---------------------------------------------------------------------------
 
-def maybe_limit_blocks(
+def apply_subset_fraction(
     blocks: List[Block],
-    *,
-    max_examples: Any,
     subset_fraction: Any,
+    *,
     label: str,
     logger: logging.Logger,
 ) -> List[Block]:
     """
-    Applica la logica di subset per un singolo split (train/val):
+    Applica subset_fraction a un singolo split (train/val).
 
-      - se max_examples non è None: usa al massimo max_examples blocchi
-      - altrimenti, se subset_fraction non è None: usa quella frazione
-      - altrimenti: usa tutti i blocchi
-
-    Ritorna la lista eventualmente ridotta.
+    - Se subset_fraction è None: usa tutti i blocchi.
+    - Se subset_fraction in (0,1]: usa quella frazione (arrotondata almeno a 1).
     """
     n = len(blocks)
     if n == 0:
         logger.warning(f"{label}: dataset vuoto prima del subset.")
         return blocks
 
-    # Limite assoluto ha priorità
-    if max_examples is not None:
-        max_examples = int(max_examples)
-        if max_examples < n:
-            logger.info(f"{label}: uso solo i primi {max_examples} esempi su {n} (max_examples).")
-            return blocks[:max_examples]
-        else:
-            logger.info(f"{label}: max_examples >= dataset, uso tutti i {n} esempi.")
-            return blocks
+    if subset_fraction is None:
+        logger.info(f"{label}: subset_fraction non definita, uso tutti i {n} esempi.")
+        return blocks
 
-    # Frazione globale (uguale per tutti i set)
-    if subset_fraction is not None:
-        frac = float(subset_fraction)
-        if not (0.0 < frac <= 1.0):
-            raise ValueError(f"{label}: subset_fraction deve essere in (0,1], trovato {frac}.")
-        k = int(n * frac)
-        k = max(1, k)
-        if k < n:
-            logger.info(f"{label}: uso solo una frazione {frac:.3f} -> {k} esempi su {n}.")
-            return blocks[:k]
-        else:
-            logger.info(f"{label}: subset_fraction ~1, uso tutti i {n} esempi.")
-            return blocks
+    frac = float(subset_fraction)
+    if not (0.0 < frac <= 1.0):
+        raise ValueError(f"{label}: subset_fraction deve essere in (0,1], trovato {frac}.")
 
-    logger.info(f"{label}: nessun limite, uso tutti i {n} esempi.")
-    return blocks
+    k = int(n * frac)
+    k = max(1, k)
+    if k < n:
+        logger.info(f"{label}: uso solo una frazione {frac:.3f} -> {k} esempi su {n}.")
+        return blocks[:k]
+    else:
+        logger.info(f"{label}: subset_fraction ~1, uso tutti i {n} esempi.")
+        return blocks
 
 
 # ---------------------------------------------------------------------------
@@ -276,17 +256,13 @@ def main() -> None:
     # ------------------------------------------------------------------ #
     # 2) Parametri da config.training
     # ------------------------------------------------------------------ #
-    # livello root training
     subset_fraction = training_root.get("subset_fraction", None)
-    max_train_examples = training_root.get("max_train_examples", None)
-    max_val_examples = training_root.get("max_val_examples", None)
     eval_every = int(training_root.get("eval_every_n_steps", 500))
     save_every = int(training_root.get("save_every_n_steps", 1000))
     run_name_prefix = training_root.get("run_name_prefix", "gpt2")
     max_steps = training_root.get("max_steps", None)
     seed = training_root.get("seed", None)
 
-    # sottosezione gpt2
     base_model_name = gpt2_cfg.get("model_name", "gpt2")
     batch_size = int(gpt2_cfg.get("batch_size", 1))
     grad_accum = int(gpt2_cfg.get("gradient_accumulation_steps", 1))
@@ -294,24 +270,16 @@ def main() -> None:
     learning_rate = float(gpt2_cfg.get("lr_full", 2e-5))
     weight_decay = float(gpt2_cfg.get("weight_decay", 0.0))
     warmup_ratio = gpt2_cfg.get("warmup_ratio", None)
-    warmup_steps = None  # usiamo il ratio, non i passi assoluti
+    gradient_checkpointing = bool(gpt2_cfg.get("gradient_checkpointing", False))
 
     # ------------------------------------------------------------------ #
-    # 3) Applicazione subset (max_* e subset_fraction globale)
+    # 3) Applicazione subset_fraction a train/val
     # ------------------------------------------------------------------ #
-    train_blocks = maybe_limit_blocks(
-        train_blocks,
-        max_examples=max_train_examples,
-        subset_fraction=subset_fraction,
-        label="train",
-        logger=logger,
+    train_blocks = apply_subset_fraction(
+        train_blocks, subset_fraction, label="train", logger=logger
     )
-    val_blocks = maybe_limit_blocks(
-        val_blocks,
-        max_examples=max_val_examples,
-        subset_fraction=subset_fraction,
-        label="val",
-        logger=logger,
+    val_blocks = apply_subset_fraction(
+        val_blocks, subset_fraction, label="val", logger=logger
     )
 
     logger.info(f"Train blocks (used): {len(train_blocks)}")
@@ -337,9 +305,8 @@ def main() -> None:
     if additional_specials:
         model.resize_token_embeddings(len(tokenizer))
 
-    # Gradient checkpointing opzionale (da config.training.gpt2.gradient_checkpointing)
-    if gpt2_cfg.get("gradient_checkpointing", False):
-        logger.info("Abilito gradient checkpointing sul modello.")
+    if gradient_checkpointing:
+        logger.info("Abilito gradient checkpointing sul modello (da config.training.gpt2).")
         model.gradient_checkpointing_enable()
 
     # Seed opzionale
@@ -369,22 +336,19 @@ def main() -> None:
     logger.info(f"HF Trainer report_to={report_to}")
     logger.info(f"run_name={run_name}")
 
-    # Strategia di evaluation
+    # Strategia di evaluation: standard HF
     evaluation_strategy = "steps" if len(val_blocks) > 0 else "no"
 
-    # Warmup: da ratio (se definito)
-    if warmup_steps is not None:
-        warmup_steps = int(warmup_steps)
-        warmup_ratio_arg = 0.0
-    else:
-        warmup_steps = 0
-        warmup_ratio_arg = float(warmup_ratio) if warmup_ratio is not None else 0.0
+    # Warmup: usiamo solo il ratio (standard HF)
+    warmup_steps = 0
+    warmup_ratio_arg = float(warmup_ratio) if warmup_ratio is not None else 0.0
 
     # ------------------------------------------------------------------ #
-    # 6) TrainingArguments & Trainer (con fallback per versioni HF vecchie)
+    # 6) TrainingArguments & Trainer (standard API)
     # ------------------------------------------------------------------ #
-    base_kwargs = dict(
+    training_args = TrainingArguments(
         output_dir=str(output_dir),
+        run_name=run_name,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
         gradient_accumulation_steps=grad_accum,
@@ -395,27 +359,13 @@ def main() -> None:
         warmup_steps=warmup_steps,
         warmup_ratio=warmup_ratio_arg,
         logging_steps=max(1, eval_every // 5),
+        evaluation_strategy=evaluation_strategy,
+        eval_steps=eval_every if evaluation_strategy == "steps" else None,
         save_steps=save_every,
         save_total_limit=3,
         report_to=report_to,
         fp16=torch.cuda.is_available(),
     )
-
-    try:
-        training_args = TrainingArguments(
-            run_name=run_name,
-            evaluation_strategy=evaluation_strategy,
-            eval_steps=eval_every if evaluation_strategy == "steps" else None,
-            **base_kwargs,
-        )
-    except TypeError as e:
-        logger.warning(
-            "TrainingArguments non supporta alcuni parametri "
-            "(probabile versione diversa di transformers). "
-            "Riprovo senza evaluation_strategy / eval_steps / run_name. "
-            f"Dettagli: {e}"
-        )
-        training_args = TrainingArguments(**base_kwargs)
 
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
@@ -431,11 +381,19 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------ #
-    # 7) Train + salvataggio
+    # 7) Train + valutazione + salvataggio
     # ------------------------------------------------------------------ #
     logger.info("Inizio training GPT-2 baseline...")
     trainer.train()
     logger.info("Training completato.")
+
+    if val_dataset is not None:
+        logger.info("Valutazione finale su validation set...")
+        metrics = trainer.evaluate()
+        logger.info(f"Validation metrics: {metrics}")
+        if "eval_loss" in metrics:
+            ppl = math.exp(metrics["eval_loss"])
+            logger.info(f"Validation perplexity (exp(eval_loss)): {ppl:.4f}")
 
     logger.info("Salvataggio modello e tokenizer finali...")
     trainer.save_model(str(output_dir))
