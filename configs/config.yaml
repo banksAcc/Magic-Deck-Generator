@@ -91,10 +91,16 @@ generation:
   eos_token: "<|endofcard|>"
 
 curation:
+  output_dir: "outputs/final_set"        # opzionale, default se manca
+  final_set_size: 100                    # opzionale
+  dedup_threshold: 0.2                   # opzionale, 0.1 più permissivo; soglia di “distanza normalizzata” che usiamo in curation per evitare quasi-duplicati tra le carte generate
   target_counts:
-    rarity: {common: 60, uncommon: 30, rare: 9, mythic: 1}
+    rarity:
+      common: 60
+      uncommon: 30
+      rare: 9
+      mythic: 1
   balance_by: ["color", "type", "rarity"]
-  dedup_threshold: 0.2 # 0.1 più permissivo; soglia di “distanza normalizzata” che usiamo in curation per evitare quasi-duplicati tra le carte generate
 
 wandb:
   enabled: false            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
