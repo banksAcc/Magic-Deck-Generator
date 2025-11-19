@@ -34,6 +34,13 @@ Esecuzione tipica (dal root della repo):
         --input data/processed/train.txt data/processed/val.txt data/processed/test.txt
 
 Se `--input` è omesso, si usano automaticamente train/val/test da `data.processed_dir`.
+
+In più, questo modulo espone alcune funzioni riusabili da altri script
+(es. a06_generate_and_validate.py):
+
+- build_validator_runtime(cfg) -> dict
+- validate_blocks(blocks, cfg=..., **runtime) -> (results, stats)
+- write_validation_results_jsonl(results, out_path)
 """
 
 from __future__ import annotations
@@ -81,6 +88,60 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     return parser.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# Helpers runtime riusabili
+# ---------------------------------------------------------------------------
+
+def build_validator_runtime(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Costruisce un piccolo dict con tutti i parametri necessari
+    alla validazione (token speciali, regex, rarities, macro-types, toggles).
+
+    Pensato per essere riusato da altri script (es. generate_and_validate).
+    """
+    validator_cfg = cfg.get("validator", {})
+    constants_cfg = cfg.get("constants", {})
+
+    # Special tokens
+    special_tokens = get_special_tokens(cfg)
+    if len(special_tokens) >= 3:
+        start_token, gen_token, end_token = special_tokens[:3]
+    else:
+        # fallback ragionevole
+        start_token = "<|startofcard|>"
+        gen_token = "<|gen_card|>"
+        end_token = "<|endofcard|>"
+
+    # Regex mana/pt
+    regexes = compile_regexes(cfg)
+    mana_regex = regexes.get("mana")
+    pt_regex = regexes.get("pt")
+
+    # Rarities e macro-types dal config (niente hard-code)
+    rarities = list(constants_cfg.get("rarities", []))
+    macro_types = list(constants_cfg.get("type_macros", []))
+
+    # Toggles validator
+    color_mana_subset_rule = bool(
+        validator_cfg.get("color_mana_subset_rule", False)
+    )
+    require_character = bool(
+        validator_cfg.get("require_character", False)
+    )
+
+    return {
+        "start_token": start_token,
+        "gen_token": gen_token,
+        "end_token": end_token,
+        "mana_regex": mana_regex,
+        "pt_regex": pt_regex,
+        "rarities": rarities,
+        "macro_types": macro_types,
+        "color_mana_subset_rule": color_mana_subset_rule,
+        "require_character": require_character,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +441,83 @@ def validate_block(
 
 
 # ---------------------------------------------------------------------------
+# Validazione di liste di blocchi (riusabile)
+# ---------------------------------------------------------------------------
+
+def validate_blocks(
+    blocks: List[Block],
+    *,
+    cfg: Dict[str, Any],
+    start_token: str,
+    gen_token: str,
+    end_token: str,
+    mana_regex,
+    pt_regex,
+    rarities: List[str],
+    macro_types: List[str],
+    color_mana_subset_rule: bool,
+    require_character: bool,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Valida una lista di blocchi di testo già in memoria.
+
+    Ritorna:
+      - results: lista di dict come `validate_block`
+      - stats:   dict con chiavi:
+                 {"total", "valid", "invalid", "error_counts"}
+    """
+    results: List[Dict[str, Any]] = []
+    valid_count = 0
+    invalid_count = 0
+    error_counter: Counter = Counter()
+
+    for block in blocks:
+        result = validate_block(
+            block,
+            cfg=cfg,
+            start_token=start_token,
+            gen_token=gen_token,
+            end_token=end_token,
+            mana_regex=mana_regex,
+            pt_regex=pt_regex,
+            rarities=rarities,
+            macro_types=macro_types,
+            color_mana_subset_rule=color_mana_subset_rule,
+            require_character=require_character,
+        )
+        results.append(result)
+
+        if result["valid"]:
+            valid_count += 1
+        else:
+            invalid_count += 1
+            for err in result["errors"]:
+                error_counter[err] += 1
+
+    stats = {
+        "total": len(blocks),
+        "valid": valid_count,
+        "invalid": invalid_count,
+        "error_counts": dict(error_counter),
+    }
+    return results, stats
+
+
+def write_validation_results_jsonl(
+    results: List[Dict[str, Any]],
+    out_path: Path,
+) -> None:
+    """
+    Scrive una lista di risultati di validazione (dict come validate_block)
+    in formato JSONL nel path specificato.
+    """
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as f_out:
+        for result in results:
+            f_out.write(json.dumps(result, ensure_ascii=False) + "\n")
+
+
+# ---------------------------------------------------------------------------
 # Validazione file
 # ---------------------------------------------------------------------------
 
@@ -420,50 +558,40 @@ def validate_file(
     out_path = path.with_name(path.stem + "_validated.jsonl")
     logger.info(f"Validazione di {path} -> {out_path} ({n_blocks} blocchi).")
 
-    valid_count = 0
-    invalid_count = 0
-    error_counter: Counter = Counter()
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with out_path.open("w", encoding="utf-8") as f_out:
-        for block in blocks:
-            result = validate_block(
-                block,
-                cfg=cfg,
-                start_token=start_token,
-                gen_token=gen_token,
-                end_token=end_token,
-                mana_regex=mana_regex,
-                pt_regex=pt_regex,
-                rarities=rarities,
-                macro_types=macro_types,
-                color_mana_subset_rule=color_mana_subset_rule,
-                require_character=require_character,
-            )
-
-            if result["valid"]:
-                valid_count += 1
-            else:
-                invalid_count += 1
-                for err in result["errors"]:
-                    error_counter[err] += 1
-
-            f_out.write(
-                json.dumps(result, ensure_ascii=False) + "\n"
-            )
-
-    logger.info(
-        f"File {path}: valid={valid_count}, invalid={invalid_count}, "
-        f"pass_rate={valid_count / n_blocks:.3f}"
+    results, stats = validate_blocks(
+        blocks,
+        cfg=cfg,
+        start_token=start_token,
+        gen_token=gen_token,
+        end_token=end_token,
+        mana_regex=mana_regex,
+        pt_regex=pt_regex,
+        rarities=rarities,
+        macro_types=macro_types,
+        color_mana_subset_rule=color_mana_subset_rule,
+        require_character=require_character,
     )
 
-    return {
+    write_validation_results_jsonl(results, out_path)
+
+    if stats["total"] > 0:
+        pass_rate = stats["valid"] / stats["total"]
+    else:
+        pass_rate = 0.0
+
+    logger.info(
+        f"File {path}: valid={stats['valid']}, invalid={stats['invalid']}, "
+        f"pass_rate={pass_rate:.3f}"
+    )
+
+    file_stats = {
         "file": str(path),
-        "total": n_blocks,
-        "valid": valid_count,
-        "invalid": invalid_count,
-        "error_counts": dict(error_counter),
+        "total": stats["total"],
+        "valid": stats["valid"],
+        "invalid": stats["invalid"],
+        "error_counts": stats["error_counts"],
     }
+    return file_stats
 
 
 # ---------------------------------------------------------------------------
@@ -481,8 +609,6 @@ def main() -> None:
 
     cfg = load_config(args.config)
     data_cfg = cfg.get("data", {})
-    validator_cfg = cfg.get("validator", {})
-    constants_cfg = cfg.get("constants", {})
 
     processed_dir = Path(data_cfg.get("processed_dir", "data/processed")).resolve()
 
@@ -496,40 +622,23 @@ def main() -> None:
             processed_dir / "test.txt",
         ]
 
-    # Special tokens
-    special_tokens = get_special_tokens(cfg)
-    if len(special_tokens) >= 3:
-        start_token, gen_token, end_token = special_tokens[:3]
-    else:
-        # fallback ragionevole
-        start_token = "<|startofcard|>"
-        gen_token = "<|gen_card|>"
-        end_token = "<|endofcard|>"
+    # Runtime validator condiviso
+    runtime = build_validator_runtime(cfg)
+    start_token = runtime["start_token"]
+    gen_token = runtime["gen_token"]
+    end_token = runtime["end_token"]
+    mana_regex = runtime["mana_regex"]
+    pt_regex = runtime["pt_regex"]
+    rarities = runtime["rarities"]
+    macro_types = runtime["macro_types"]
+    color_mana_subset_rule = runtime["color_mana_subset_rule"]
+    require_character = runtime["require_character"]
 
     logger.info(f"Start token: {start_token}")
     logger.info(f"Gen token:   {gen_token}")
     logger.info(f"End token:   {end_token}")
-
-    # Regex mana/pt
-    regexes = compile_regexes(cfg)
-    mana_regex = regexes.get("mana")
-    pt_regex = regexes.get("pt")
-
-    # Rarities e macro-types dal config (niente hard-code)
-    rarities = list(constants_cfg.get("rarities", []))
-    macro_types = list(constants_cfg.get("type_macros", []))
-
     logger.info(f"Rarities consentite (da config): {rarities}")
     logger.info(f"Macro-types (da config): {macro_types}")
-
-    # Toggles validator
-    color_mana_subset_rule = bool(
-        validator_cfg.get("color_mana_subset_rule", False)
-    )
-    require_character = bool(
-        validator_cfg.get("require_character", False)
-    )
-
     logger.info(
         f"Regola color_mana_subset_rule attiva: {color_mana_subset_rule}"
     )

@@ -70,13 +70,25 @@ training:
     grad_checkpointing: true
     weight_decay: 0.01
 
+ppl_eval:
+  run_name: "gpt2-gpt2"
+  split: "test"
+  subset_fraction: 1.0
+  batch_size: 4
+
 generation:
+  model_type: "gpt2"        # "mistral" | "gpt2"
+  base_model_name: "mistralai/Mistral-7B-Instruct-v0.2"   # o gpt2-large
+  checkpoint_path: "outputs/checkpoints/mistral7b_qLoRA"  # dir dell’adapter o FT
+  device: "cuda"               # "cuda" | "cpu" | "auto"
+  batch_size: 8
+  samples_per_mapping: 100     # o calcolato da num_samples / #mapping rows
+  num_samples: 1500
   temperature: 0.8
   top_p: 0.9
   repetition_penalty: 1.1
   max_new_tokens: 160
   eos_token: "<|endofcard|>"
-  num_samples: 1500
 
 curation:
   target_counts:
