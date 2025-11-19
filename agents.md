@@ -37,17 +37,17 @@ Magic-Deck-Generator/
 │  ├─ a01_preprocessor.py      # bulk -> all.txt (+ stats, W&B lite)
 │  ├─ a02_split.py             # (planned) 80/10/10 split
 │  ├─ a03_validate.py          # (planned) hard validator
-│  ├─ a04_train_mistral_lora.py
+│  ├─ a04_train_mistral_lora.py # empty for now
 │  ├─ a04_train_gpt2.py        # (planned) GPT-2 baseline
 │  ├─ a05_eval_ppl.py          # (planned) PPL eval (global & clusters)
-│  ├─ a06_generate.py          # (planned) conditional generation
+│  ├─ a06_generate_and_validate.py          # (planned) conditional generation
 │  └─ a07_curate.py            # (planned) ranking + balancing
 ├─ outputs/
 │  ├─ checkpoints/
 │  ├─ generations/
 │  └─ final_set/
 │
-├─ README.md
+├─ README.md #TO BE DONE
 ├─ requirements.txt
 ├─ operative_guide.txt
 └─ agents.md                   # this file
