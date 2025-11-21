@@ -78,7 +78,7 @@ ppl_eval:
 
 generation:
   model_type: "gpt2"        # "mistral" | "gpt2"
-  base_model_name: "gpt2"   # o gpt2-large
+  base_model_name: "gpt2"   # o gpt2
   checkpoint_path: "outputs/test_1-gpt2"  # dir dell’adapter o FT
   device: "cuda"               # "cuda" | "cpu" | "auto"
   batch_size: 8
