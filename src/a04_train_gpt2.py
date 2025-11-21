@@ -14,27 +14,23 @@ Baseline training GPT-2 per MTG×MHA (config-driven).
     - model_name, lr_full, num_epochs, batch_size, gradient_accumulation_steps, ecc.
 - Controlli globali da config.training:
     - subset_fraction (unica frazione per train/val)
-    - eval_every_n_steps, save_every_n_steps, run_name_prefix, seed.
-- Nessun max_train_examples / max_val_examples: si usa solo subset_fraction.
-- Usa HuggingFace Trainer con valutazione su validation:
-    - evaluation_strategy="steps"
-    - eval_steps = eval_every_n_steps
-    - trainer.evaluate() finale a fine training.
+    - eval_every_n_steps
+    - save_every_n_steps
+    - run_name_prefix
+- Nessun max_steps né seed: la durata del training è solo in termini di epoche.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import math
 import os
 import inspect
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, Any
 
 import torch
-from torch.utils.data import Dataset
 
 from transformers import (
     AutoTokenizer,
@@ -42,17 +38,21 @@ from transformers import (
     Trainer,
     TrainingArguments,
     DataCollatorForLanguageModeling,
-    set_seed,
 )
 
-from .a00_utils import load_config, get_special_tokens
-
-Block = str
+from .a00_utils import (
+    load_config,
+    get_special_tokens,
+    read_validated_blocks,
+    CardDataset,
+    apply_subset_fraction,
+)
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -68,129 +68,9 @@ def parse_args() -> argparse.Namespace:
 
 
 # ---------------------------------------------------------------------------
-# Lettura blocchi da *_validated.jsonl
-# ---------------------------------------------------------------------------
-
-def read_validated_blocks(path: Path, logger: logging.Logger) -> List[Block]:
-    """
-    Legge un file *.jsonl prodotto dal validator (train_validated.jsonl, val_validated.jsonl, ...),
-    e ritorna una lista di blocchi di testo (field 'raw').
-
-    - Usa solo i record con "valid": true.
-    - Ignora eventuali record senza 'raw' valido.
-    """
-    if not path.is_file():
-        raise FileNotFoundError(f"File JSONL non trovato: {path}")
-
-    blocks: List[Block] = []
-    total_records = 0
-    used_records = 0
-
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-
-            total_records += 1
-            rec = json.loads(line)
-
-            if not rec.get("valid", False):
-                continue
-
-            raw = rec.get("raw", None)
-            if isinstance(raw, str) and raw.strip():
-                blocks.append(raw)
-                used_records += 1
-
-    logger.info(
-        f"{path.name}: record totali={total_records}, "
-        f"validi usati={used_records}, scartati={total_records - used_records}"
-    )
-    return blocks
-
-
-# ---------------------------------------------------------------------------
-# Dataset
-# ---------------------------------------------------------------------------
-
-class CardDataset(Dataset):
-    """
-    Dataset semplice: ogni esempio è un blocco carta completo.
-    Viene tokenizzato on-the-fly e troncato/paddato a seq_len.
-    """
-
-    def __init__(self, blocks: List[Block], tokenizer, seq_len: int):
-        self.blocks = blocks
-        self.tokenizer = tokenizer
-        self.seq_len = seq_len
-
-    def __len__(self) -> int:
-        return len(self.blocks)
-
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        text = self.blocks[idx]
-        enc = self.tokenizer(
-            text,
-            truncation=True,
-            max_length=self.seq_len,
-            padding="max_length",
-            return_tensors="pt",
-        )
-        input_ids = enc["input_ids"].squeeze(0)
-        attention_mask = enc["attention_mask"].squeeze(0)
-        labels = input_ids.clone()  # causal LM: predict next token su tutto
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": labels,
-        }
-
-
-# ---------------------------------------------------------------------------
-# Subset logic (solo subset_fraction)
-# ---------------------------------------------------------------------------
-
-def apply_subset_fraction(
-    blocks: List[Block],
-    subset_fraction: Any,
-    *,
-    label: str,
-    logger: logging.Logger,
-) -> List[Block]:
-    """
-    Applica subset_fraction a un singolo split (train/val).
-
-    - Se subset_fraction è None: usa tutti i blocchi.
-    - Se subset_fraction in (0,1]: usa quella frazione (arrotondata almeno a 1).
-    """
-    n = len(blocks)
-    if n == 0:
-        logger.warning(f"{label}: dataset vuoto prima del subset.")
-        return blocks
-
-    if subset_fraction is None:
-        logger.info(f"{label}: subset_fraction non definita, uso tutti i {n} esempi.")
-        return blocks
-
-    frac = float(subset_fraction)
-    if not (0.0 < frac <= 1.0):
-        raise ValueError(f"{label}: subset_fraction deve essere in (0,1], trovato {frac}.")
-
-    k = int(n * frac)
-    k = max(1, k)
-    if k < n:
-        logger.info(f"{label}: uso solo una frazione {frac:.3f} -> {k} esempi su {n}.")
-        return blocks[:k]
-    else:
-        logger.info(f"{label}: subset_fraction ~1, uso tutti i {n} esempi.")
-        return blocks
-
-
-# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     args = parse_args()
@@ -261,8 +141,6 @@ def main() -> None:
     eval_every = int(training_root.get("eval_every_n_steps", 500))
     save_every = int(training_root.get("save_every_n_steps", 1000))
     run_name_prefix = training_root.get("run_name_prefix", "gpt2")
-    max_steps = training_root.get("max_steps", None)
-    seed = training_root.get("seed", None)
 
     base_model_name = gpt2_cfg.get("model_name", "gpt2")
     batch_size = int(gpt2_cfg.get("batch_size", 1))
@@ -310,22 +188,16 @@ def main() -> None:
         logger.info("Abilito gradient checkpointing sul modello (da config.training.gpt2).")
         model.gradient_checkpointing_enable()
 
-    # Seed opzionale
-    if seed is not None:
-        seed = int(seed)
-        logger.info(f"Imposto seed globale a {seed}.")
-        set_seed(seed)
-
     # ------------------------------------------------------------------ #
     # 5) Dataset & hyperparametri
     # ------------------------------------------------------------------ #
     train_dataset = CardDataset(train_blocks, tokenizer, seq_len)
     val_dataset = CardDataset(val_blocks, tokenizer, seq_len) if len(val_blocks) > 0 else None
 
-    logger.info("--- Hyperparameters ---")
+    logger.info("--- Hyperparameters GPT-2 ---")
     logger.info(f"batch_size={batch_size}, grad_accum={grad_accum}, num_epochs={num_epochs}")
     logger.info(f"lr={learning_rate}, weight_decay={weight_decay}")
-    logger.info(f"warmup_ratio={warmup_ratio}, max_steps={max_steps}")
+    logger.info(f"warmup_ratio={warmup_ratio}")
     logger.info(f"subset_fraction={subset_fraction}")
     logger.info(f"eval_every={eval_every}, save_every={save_every}")
 
@@ -362,7 +234,6 @@ def main() -> None:
     _maybe_add("learning_rate", learning_rate)
     _maybe_add("weight_decay", weight_decay)
     _maybe_add("num_train_epochs", num_epochs)
-    _maybe_add("max_steps", int(max_steps) if max_steps is not None else -1)
     _maybe_add("warmup_steps", warmup_steps)
     _maybe_add("warmup_ratio", warmup_ratio_arg)
     _maybe_add("logging_steps", max(1, eval_every // 5))

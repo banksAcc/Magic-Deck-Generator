@@ -21,6 +21,11 @@ import os
 import re
 import csv
 import json
+import logging
+
+import torch
+from torch.utils.data import Dataset
+
 from pathlib import Path
 
 from typing import Any, Dict, Optional, Pattern, Set, List, Tuple
@@ -289,3 +294,119 @@ class MhaMapper:
             return rule.get("theme"), rule.get("character")
 
         return None, None
+
+
+# ---------------------------------------------------------------------------
+# Helpers comuni per il training (GPT-2 / Mistral)
+# ---------------------------------------------------------------------------
+
+Block = str
+
+
+def read_validated_blocks(path: Path, logger: logging.Logger) -> List[Block]:
+    """
+    Legge un file *.jsonl prodotto dal validator (train_validated.jsonl, val_validated.jsonl, ...),
+    e ritorna una lista di blocchi di testo (field 'raw').
+
+    - Usa solo i record con "valid": true.
+    - Ignora eventuali record senza 'raw' valido.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"File JSONL non trovato: {path}")
+
+    blocks: List[Block] = []
+    total_records = 0
+    used_records = 0
+
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            total_records += 1
+            rec = json.loads(line)
+
+            if not rec.get("valid", False):
+                continue
+
+            raw = rec.get("raw", None)
+            if isinstance(raw, str) and raw.strip():
+                blocks.append(raw)
+                used_records += 1
+
+    logger.info(
+        f"{path.name}: record totali={total_records}, "
+        f"validi usati={used_records}, scartati={total_records - used_records}"
+    )
+    return blocks
+
+
+class CardDataset(Dataset):
+    """
+    Dataset semplice: ogni esempio è un blocco carta completo.
+    Viene tokenizzato on-the-fly e troncato/paddato a seq_len.
+    """
+
+    def __init__(self, blocks: List[Block], tokenizer, seq_len: int):
+        self.blocks = blocks
+        self.tokenizer = tokenizer
+        self.seq_len = seq_len
+
+    def __len__(self) -> int:
+        return len(self.blocks)
+
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        text = self.blocks[idx]
+        enc = self.tokenizer(
+            text,
+            truncation=True,
+            max_length=self.seq_len,
+            padding="max_length",
+            return_tensors="pt",
+        )
+        input_ids = enc["input_ids"].squeeze(0)
+        attention_mask = enc["attention_mask"].squeeze(0)
+        labels = input_ids.clone()  # causal LM: predict next token su tutto
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+
+def apply_subset_fraction(
+    blocks: List[Block],
+    subset_fraction: Any,
+    *,
+    label: str,
+    logger: logging.Logger,
+) -> List[Block]:
+    """
+    Applica subset_fraction a un singolo split (train/val).
+
+    - Se subset_fraction è None: usa tutti i blocchi.
+    - Se subset_fraction in (0,1]: usa quella frazione (arrotondata almeno a 1).
+    """
+    n = len(blocks)
+    if n == 0:
+        logger.warning(f"{label}: dataset vuoto prima del subset.")
+        return blocks
+
+    if subset_fraction is None:
+        logger.info(f"{label}: subset_fraction non definita, uso tutti i {n} esempi.")
+        return blocks
+
+    frac = float(subset_fraction)
+    if not (0.0 < frac <= 1.0):
+        raise ValueError(f"{label}: subset_fraction deve essere in (0,1], trovato {frac}.")
+
+    k = int(n * frac)
+    k = max(1, k)
+    if k < n:
+        logger.info(f"{label}: uso solo una frazione {frac:.3f} -> {k} esempi su {n}.")
+        return blocks[:k]
+    else:
+        logger.info(f"{label}: subset_fraction ~1, uso tutti i {n} esempi.")
+        return blocks

@@ -58,17 +58,43 @@ training:
     batch_size: 1
     gradient_accumulation_steps: 4
   mistral:
-    model_name: "mistralai/Mistral-7B-v0.1"
-    quant: "nf4"
+    # modello base Mistral v0.3
+    model_name: "mistralai/Mistral-7B-v0.3"
+    # in alternativa, un checkpoint già 4bit tipo unsloth:
+    # model_name: "unsloth/mistral-7b-v0.3-bnb-4bit"  # opzionale :contentReference[oaicite:1]{index=1}
+
+    batch_size: 1                   # per-device
+    gradient_accumulation_steps: 64 # eff. batch ~64
+    num_epochs: 1
+    lr: 1e-4
+    weight_decay: 0.0
+    warmup_ratio: 0.02
+    gradient_checkpointing: true
+    lr_scheduler_type: "cosine"
+
+    # ---- quantizzazione modulare ----
+    quantization_bits: 4        # 4 = QLoRA classico, 8 = LLM.int8
+    quant_type: "nf4"           # usato solo se quantization_bits == 4
+    double_quant: true
+    use_flash_attention_2: false
+    llm_int8_threshold: 6.0     # usato solo se quantization_bits == 8
+    llm_int8_has_fp16_weight: false
+
+    # ---- LoRA ----
     lora_r: 32
     lora_alpha: 32
     lora_dropout: 0.05
-    lr: 1e-4
-    epochs: 2
-    warmup_ratio: 0.02
-    batch_eff: 64
-    grad_checkpointing: true
-    weight_decay: 0.01
+    target_modules:
+      - q_proj
+      - k_proj
+      - v_proj
+      - o_proj
+      - gate_proj
+      - up_proj
+      - down_proj
+
+    # optimizer consigliato per QLoRA
+    optim: "paged_adamw_8bit"
 
 ppl_eval:
   run_name: "test_1-gpt2"
