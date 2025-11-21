@@ -1,20 +1,44 @@
-card_name,oracle_id,theme,character
-Lightning Bolt,,U.A. Students,Katsuki Bakugo
-Shock,,U.A. Students,Katsuki Bakugo
-Goblin Guide,,U.A. Students,Katsuki Bakugo
-Lava Spike,,U.A. Students,Katsuki Bakugo
-Llanowar Elves,,U.A. Students,Izuku Midoriya
-Pelt Collector,,U.A. Students,Izuku Midoriya
-Hero of Precinct One,,U.A. Students,Izuku Midoriya
-Glorious Anthem,,Pro Heroes,All Might
-Banishing Light,,Pro Heroes,All Might
-Gideon's Triumph,,Pro Heroes,All Might
-Doom Blade,,League of Villains,Tomura Shigaraki
-Murder,,League of Villains,Tomura Shigaraki
-Thoughtseize,,League of Villains,Tomura Shigaraki
-Counterspell,,Pro Heroes,Shota Aizawa
-Mana Leak,,Pro Heroes,Shota Aizawa
-Essence Scatter,,Pro Heroes,Shota Aizawa
-Frost Lynx,,U.A. Students,Shoto Todoroki
-Icy Manipulator,,U.A. Students,Shoto Todoroki
-Flame Slash,,U.A. Students,Shoto Todoroki
+character_or_faction,color_id,default_type,rarity_hint,mechanics_hints,notes
+Katsuki Bakugo,R,Legendary Creature | Hero,rare,burn damage and explosive tempo,Seed card: Lightning Bolt
+Katsuki Bakugo,R,Legendary Creature | Hero,rare,cheap burn and combat tricks,Seed card: Shock
+Katsuki Bakugo,R,Legendary Creature | Hero,rare,fast aggression and attack triggers,Seed card: Goblin Guide
+Katsuki Bakugo,R,Legendary Creature | Hero,rare,direct damage to players and creatures,Seed card: Lava Spike
+Katsuki Bakugo,R,Legendary Creature | Hero,rare,discard for value and draw smoothing,Seed card: Thrill of Possibility
+Izuku Midoriya,G W,Legendary Creature | Hero,rare,+1/+1 counters and growth,Seed card: Llanowar Elves
+Izuku Midoriya,G W,Legendary Creature | Hero,rare,counters and teamwork payoffs,Seed card: Pelt Collector
+Izuku Midoriya,G W,Legendary Creature | Hero,rare,go-wide hero leadership,Seed card: Hero of Precinct One
+Izuku Midoriya,G W,Legendary Creature | Hero,rare,evolving strength over time,Seed card: Renegade Krasis
+All Might,W,Legendary Creature | Hero,mythic,heroic pumps and protection,Seed card: Glorious Anthem
+All Might,W,Legendary Creature | Hero,mythic,removal and justice theme,Seed card: Banishing Light
+All Might,W,Legendary Creature | Hero,mythic,combat dominance and shields,Seed card: Gideon's Triumph
+All Might,W,Legendary Creature | Hero,mythic,battlefield leadership and flying allies,Seed card: Angelic Captain
+Tomura Shigaraki,B,Legendary Creature | Villain,mythic,destruction and wither,Seed card: Doom Blade
+Tomura Shigaraki,B,Legendary Creature | Villain,mythic,deadly removal and cruelty,Seed card: Murder
+Tomura Shigaraki,B,Legendary Creature | Villain,mythic,hand disruption and corruption,Seed card: Thoughtseize
+Tomura Shigaraki,B,Legendary Creature | Villain,mythic,bleed effects versus enchantments,Seed card: Feed the Swarm
+Shota Aizawa,U,Legendary Creature | Hero,rare,stun control and negation,Seed card: Counterspell
+Shota Aizawa,U,Legendary Creature | Hero,rare,tempo counter-magic,Seed card: Mana Leak
+Shota Aizawa,U,Legendary Creature | Hero,rare,creature denial and timing,Seed card: Essence Scatter
+Shota Aizawa,U,Legendary Creature | Hero,rare,draw plus counter hybrid,Seed card: Exclude
+Shoto Todoroki,U R,Legendary Creature | Hero,rare,freeze and tapdown,Seed card: Frost Lynx
+Shoto Todoroki,U R,Legendary Creature | Hero,rare,control artifacts and ice,Seed card: Icy Manipulator
+Shoto Todoroki,U R,Legendary Creature | Hero,rare,fire burst removal,Seed card: Flame Slash
+Shoto Todoroki,U R,Legendary Creature | Hero,rare,elemental finishing strike,Seed card: Chandra's Triumph
+Tenya Iida,W U,Legendary Creature | Hero,rare,vigilance and speed,Seed card: Sky Hussar
+Tenya Iida,W U,Legendary Creature | Hero,rare,lifelink and aerial rescue,Seed card: Aerial Responder
+Tenya Iida,W U,Legendary Creature | Hero,rare,knight discipline and ramp parity,Seed card: Knight of the White Orchid
+Ochaco Uraraka,U,Legendary Creature | Hero,rare,bounce and battlefield reset,Seed card: Aether Adept
+Ochaco Uraraka,U,Legendary Creature | Hero,rare,flying rescue and tempo,Seed card: Rescuer Sphinx
+Ochaco Uraraka,U,Legendary Creature | Hero,rare,steal opposing creatures,Seed card: Seasinger
+Tsuyu Asui,G U,Legendary Creature | Hero,rare,reach and amphibious mobility,Seed card: Reach of Branches
+Tsuyu Asui,G U,Legendary Creature | Hero,rare,flashy ambush tactics,Seed card: Bounding Krasis
+Tsuyu Asui,G U,Legendary Creature | Hero,rare,anti-flying defense,Seed card: Clip Wings
+Eijiro Kirishima,R W,Legendary Creature | Hero,rare,double strike weapons and toughness,Seed card: Embercleave
+Eijiro Kirishima,R W,Legendary Creature | Hero,rare,damage reflection and resilience,Seed card: Boros Reckoner
+Eijiro Kirishima,R W,Legendary Creature | Hero,rare,self-sacrifice protection,Seed card: Selfless Spirit
+Dabi,B R,Legendary Creature | Villain,rare,sacrifice and spectacle damage,Seed card: Fireblade Artist
+Dabi,B R,Legendary Creature | Villain,rare,aristocrats and burn triggers,Seed card: Judith, the Scourge Diva
+Dabi,B R,Legendary Creature | Villain,rare,devilish ping and tokens,Seed card: Mayhem Devil
+Himiko Toga,B U,Legendary Creature | Villain,rare,steal identity and evasion,Seed card: Nightveil Specter
+Himiko Toga,B U,Legendary Creature | Villain,rare,draw from opponents and stealth,Seed card: Thief of Sanity
+Himiko Toga,B U,Legendary Creature | Villain,rare,life drain and luxury theft,Seed card: Gonti, Lord of Luxury

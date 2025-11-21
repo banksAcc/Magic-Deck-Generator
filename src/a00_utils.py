@@ -23,7 +23,7 @@ import csv
 import json
 from pathlib import Path
 
-from typing import Any, Dict, Optional, Pattern, Set, List
+from typing import Any, Dict, Optional, Pattern, Set, List, Tuple
 
 # --- Import opzionale per W&B (non obbligatorio all'avvio) ---
 try:
@@ -65,38 +65,65 @@ def get_special_tokens(cfg: Dict[str, Any]) -> List[str]:
             seen.add(t)
     return out
 
-def load_mapping_seed(path: str):
-    path = Path(path)
-    seed_by_name = {}
-    seed_by_oracle_id = {}
+def load_mapping_seed(path: str) -> Tuple[Dict[str, Tuple[str, str]], Dict[str, Tuple[str, str]]]:
+    """Load the CSV seed mapping and return lookup dicts keyed by name/oracle_id."""
 
-    if not path.exists():
+    path_obj = Path(path)
+    seed_by_name: Dict[str, Tuple[str, str]] = {}
+    seed_by_oracle_id: Dict[str, Tuple[str, str]] = {}
+
+    if not path_obj.exists():
         return seed_by_name, seed_by_oracle_id
 
-    with path.open("r", encoding="utf-8") as f:
+    with path_obj.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            name = row.get("card_name")
-            oracle_id = row.get("oracle_id")
-            theme = row.get("theme")
-            character = row.get("character")
+            name = (row.get("card_name") or "").strip().lower()
+            oracle_id = (row.get("oracle_id") or "").strip()
+            theme = (row.get("theme") or "Generic").strip()
+            character = (row.get("character") or "N/A").strip()
 
             if name:
-                seed_by_name[name.lower()] = (theme, character)
+                seed_by_name[name] = (theme, character)
             if oracle_id:
                 seed_by_oracle_id[oracle_id] = (theme, character)
 
     return seed_by_name, seed_by_oracle_id
 
 
-def load_keyword_rules(path: str):
-    path = Path(path)
-    if not path.exists():
+def load_keyword_rules(path: str) -> List[Dict[str, Any]]:
+    """Load keyword-driven rules and normalize their matching metadata."""
+
+    path_obj = Path(path)
+    if not path_obj.exists():
         return []
 
-    with path.open("r", encoding="utf-8") as f:
-        rules = json.load(f)
-    return rules
+    with path_obj.open("r", encoding="utf-8") as f:
+        raw_rules: List[Dict[str, Any]] = json.load(f)
+
+    def _lower_seq(values: List[str]) -> Tuple[str, ...]:
+        return tuple(v.lower() for v in values if isinstance(v, str) and v.strip())
+
+    normalized_rules: List[Dict[str, Any]] = []
+    for rule in raw_rules:
+        normalized_rules.append(
+            {
+                "id": rule.get("id", "unknown"),
+                "colors": set(rule.get("colors") or []),
+                "any_text": _lower_seq(rule.get("any_text") or []),
+                "all_text": _lower_seq(rule.get("all_text") or []),
+                "type_contains": _lower_seq(rule.get("type_contains") or []),
+                "theme": rule.get("theme", "Generic"),
+                "character": rule.get("character", "N/A"),
+                "priority": int(rule.get("priority", 0)),
+                "cmc_min": rule.get("cmc_min"),
+                "cmc_max": rule.get("cmc_max"),
+            }
+        )
+
+    # Highest priority first for deterministic resolution of overlapping rules.
+    normalized_rules.sort(key=lambda r: r["priority"], reverse=True)
+    return normalized_rules
 
 # ---------------------------------------------------------------------
 # Weights & Biases
@@ -181,6 +208,8 @@ def read_lines(path: str) -> List[str]:
 # mapper
 # ---------------------------------------------------------------------
 class MhaMapper:
+    """Simple helper that attaches (theme, character) metadata to each card."""
+
     def __init__(self, cfg):
         mapping_cfg = cfg.get("mapping", {})
         self.enabled = mapping_cfg.get("enabled", False)
@@ -200,10 +229,7 @@ class MhaMapper:
         self.rules = load_keyword_rules(keywords_path)
 
     def __call__(self, card: dict):
-        """
-        card è l’oggetto Scryfall completo.
-        Ritorna (theme, character)
-        """
+        """Return the `(theme, character)` tuple for the provided Scryfall card."""
         if not self.enabled:
             return self.default_theme, self.default_character
 
@@ -229,23 +255,37 @@ class MhaMapper:
         return self.default_theme, self.default_character
 
     def _apply_keyword_rules(self, card: dict):
+        """Best-effort heuristic mapping based on oracle text, type line, and colors."""
+
         text = (card.get("oracle_text") or "").lower()
         type_line = (card.get("type_line") or "").lower()
-        colors = "".join(card.get("color_identity") or [])
-        # qui la logica dipende dalla struttura di keywords.json
+        colors = set(card.get("color_identity") or [])
+        cmc = card.get("cmc")
 
         for rule in self.rules:
-            # es: { "id": "bakugo_rule", "colors": ["R"], "any_text": ["damage", "attack"], "theme": "U.A. Students", "character": "Bakugo Katsuki" }
-            needed_colors = set(rule.get("colors", []))
-            any_text = [kw.lower() for kw in rule.get("any_text", [])]
-
-            if needed_colors and not needed_colors.issubset(set(colors)):
+            needed_colors: Set[str] = rule.get("colors", set())
+            if needed_colors and not needed_colors.issubset(colors):
                 continue
 
+            any_text = rule.get("any_text", tuple())
             if any_text and not any(kw in text or kw in type_line for kw in any_text):
                 continue
 
-            # se la regola è soddisfatta
+            all_text = rule.get("all_text", tuple())
+            if all_text and not all(kw in text for kw in all_text):
+                continue
+
+            type_contains = rule.get("type_contains", tuple())
+            if type_contains and not any(kw in type_line for kw in type_contains):
+                continue
+
+            cmc_min = rule.get("cmc_min")
+            cmc_max = rule.get("cmc_max")
+            if cmc_min is not None and (cmc is None or cmc < cmc_min):
+                continue
+            if cmc_max is not None and (cmc is None or cmc > cmc_max):
+                continue
+
             return rule.get("theme"), rule.get("character")
 
         return None, None

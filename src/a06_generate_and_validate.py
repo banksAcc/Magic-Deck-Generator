@@ -124,7 +124,7 @@ def load_mapping_seed(path: Path, logger: logging.Logger) -> List[MappingSeedRow
     """
     Carica il CSV di mapping MHA -> MTG.
 
-    Colonne attese:
+    Colonne richieste:
         character_or_faction,color_id,default_type,rarity_hint,mechanics_hints,notes
     """
     import csv
@@ -135,7 +135,9 @@ def load_mapping_seed(path: Path, logger: logging.Logger) -> List[MappingSeedRow
     rows: List[MappingSeedRow] = []
     with path.open("r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        expected_cols = {
+        fieldnames = set(reader.fieldnames or [])
+
+        required_cols = {
             "character_or_faction",
             "color_id",
             "default_type",
@@ -143,11 +145,20 @@ def load_mapping_seed(path: Path, logger: logging.Logger) -> List[MappingSeedRow
             "mechanics_hints",
             "notes",
         }
-        missing = expected_cols - set(reader.fieldnames or [])
+
+        missing = required_cols - fieldnames
+        extra = fieldnames - required_cols
+
         if missing:
             raise ValueError(
-                f"mapping_seed.csv manca delle colonne: {sorted(missing)} "
-                f"(trovate: {reader.fieldnames})"
+                "mapping_seed.csv manca delle colonne richieste: "
+                f"{sorted(missing)} (trovate: {sorted(fieldnames)})"
+            )
+
+        if extra:
+            logger.warning(
+                "mapping_seed.csv contiene colonne aggiuntive non utilizzate: "
+                f"{sorted(extra)}"
             )
 
         for r in reader:
@@ -407,6 +418,32 @@ def generate_with_model(
     max_new_tokens = int(gen_cfg.get("max_new_tokens", 160))
     batch_size = int(gen_cfg.get("batch_size", 4))
 
+    # Alcune versioni di Transformers non accettano tutti i parametri di generate
+    # (es. cambi di nome / deprecazioni). Filtriamo dinamicamente i kwargs per
+    # evitare TypeError "unexpected keyword argument" simili a quelli visti
+    # con TrainingArguments su ambienti legacy.
+    import inspect
+
+    supported_params = set(inspect.signature(model.generate).parameters)
+    requested_kwargs = {
+        "do_sample": True,
+        "temperature": temperature,
+        "top_p": top_p,
+        "repetition_penalty": repetition_penalty,
+        "max_new_tokens": max_new_tokens,
+        "eos_token_id": eos_token_id,
+        "pad_token_id": tokenizer.pad_token_id,
+    }
+    generation_kwargs = {
+        k: v for k, v in requested_kwargs.items() if k in supported_params
+    }
+    dropped = set(requested_kwargs) - set(generation_kwargs)
+    if dropped:
+        logger.warning(
+            "Parametri generate non supportati in questa versione di transformers: %s",
+            sorted(dropped),
+        )
+
     logger.info(
         "Parametri di generazione: "
         f"temperature={temperature}, top_p={top_p}, "
@@ -432,13 +469,7 @@ def generate_with_model(
             outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                do_sample=True,
-                temperature=temperature,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                max_new_tokens=max_new_tokens,
-                eos_token_id=eos_token_id,
-                pad_token_id=tokenizer.pad_token_id,
+                **generation_kwargs,
             )
 
         decoded = tokenizer.batch_decode(outputs, skip_special_tokens=False)

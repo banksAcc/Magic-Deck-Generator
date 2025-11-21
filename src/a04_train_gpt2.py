@@ -29,6 +29,7 @@ import json
 import logging
 import math
 import os
+import inspect
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -346,26 +347,42 @@ def main() -> None:
     # ------------------------------------------------------------------ #
     # 6) TrainingArguments & Trainer (standard API)
     # ------------------------------------------------------------------ #
-    training_args = TrainingArguments(
-        output_dir=str(output_dir),
-        run_name=run_name,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=grad_accum,
-        learning_rate=learning_rate,
-        weight_decay=weight_decay,
-        num_train_epochs=num_epochs,
-        max_steps=int(max_steps) if max_steps is not None else -1,
-        warmup_steps=warmup_steps,
-        warmup_ratio=warmup_ratio_arg,
-        logging_steps=max(1, eval_every // 5),
-        evaluation_strategy=evaluation_strategy,
-        eval_steps=eval_every if evaluation_strategy == "steps" else None,
-        save_steps=save_every,
-        save_total_limit=3,
-        report_to=report_to,
-        fp16=torch.cuda.is_available(),
-    )
+    training_sig = inspect.signature(TrainingArguments.__init__).parameters
+
+    def _maybe_add(param: str, value: Any) -> None:
+        if param in training_sig:
+            training_kwargs[param] = value
+
+    training_kwargs: Dict[str, Any] = {}
+    _maybe_add("output_dir", str(output_dir))
+    _maybe_add("run_name", run_name)
+    _maybe_add("per_device_train_batch_size", batch_size)
+    _maybe_add("per_device_eval_batch_size", batch_size)
+    _maybe_add("gradient_accumulation_steps", grad_accum)
+    _maybe_add("learning_rate", learning_rate)
+    _maybe_add("weight_decay", weight_decay)
+    _maybe_add("num_train_epochs", num_epochs)
+    _maybe_add("max_steps", int(max_steps) if max_steps is not None else -1)
+    _maybe_add("warmup_steps", warmup_steps)
+    _maybe_add("warmup_ratio", warmup_ratio_arg)
+    _maybe_add("logging_steps", max(1, eval_every // 5))
+    _maybe_add("save_steps", save_every)
+    _maybe_add("save_total_limit", 3)
+    _maybe_add("report_to", report_to)
+    _maybe_add("fp16", torch.cuda.is_available())
+
+    # Evaluation strategy: support old/new HF APIs.
+    if "evaluation_strategy" in training_sig or "eval_strategy" in training_sig:
+        key = "evaluation_strategy" if "evaluation_strategy" in training_sig else "eval_strategy"
+        training_kwargs[key] = evaluation_strategy
+        if evaluation_strategy == "steps" and "eval_steps" in training_sig:
+            training_kwargs["eval_steps"] = eval_every
+    elif "evaluate_during_training" in training_sig:
+        training_kwargs["evaluate_during_training"] = evaluation_strategy != "no"
+        if evaluation_strategy != "no" and "evaluate_during_training_steps" in training_sig:
+            training_kwargs["evaluate_during_training_steps"] = eval_every
+
+    training_args = TrainingArguments(**training_kwargs)
 
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,

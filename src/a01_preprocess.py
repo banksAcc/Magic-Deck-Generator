@@ -120,16 +120,19 @@ def _is_lang_ok(card: Dict[str, Any], lang: str = "en") -> bool:
     return (card.get("lang") or "").lower() == lang.lower()
 
 
-def _is_layout_allowed(card: Dict[str, Any], allowed: List[str]) -> bool:
-    return (card.get("layout") or "") in set(allowed)
-
-
 def _has_essentials(card: Dict[str, Any]) -> bool:
     """
     Richiediamo almeno: name, type_line, rarity.
     (mana_cost e oracle_text possono mancare; pt è opzionale.)
     """
     return bool(card.get("name")) and bool(card.get("type_line")) and bool(card.get("rarity"))
+
+
+def _macro_type(type_line: str) -> str:
+    """Restituisce il tipo macro (es. Creature, Instant) con fallback sicuro."""
+    head = type_line.split("|")[0].strip()
+    tokens = [tok for tok in head.split(" ") if tok]
+    return tokens[-1] if tokens else "Unknown"
 
 
 # --------------------------
@@ -183,7 +186,7 @@ def main() -> None:
     # Mapper Magic -> (theme, character) per MHA (può essere disabilitato da config)
     mapper = MhaMapper(cfg)
 
-    allowed_layouts = data_cfg.get("layouts_allowed", ["normal"])
+    allowed_layouts = set(data_cfg.get("layouts_allowed", ["normal"]))
     lang = data_cfg.get("language", "en")
 
     # Percorsi I/O
@@ -209,6 +212,9 @@ def main() -> None:
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Invalid JSON in {raw_path}: {e}") from e
 
+    if not isinstance(cards, list):
+        raise RuntimeError(f"Expected list of cards in {raw_path}, got {type(cards).__name__}")
+
     # Statistiche
     total = 0
     kept = 0
@@ -225,7 +231,7 @@ def main() -> None:
             if not _is_lang_ok(card, lang=lang):
                 dropped_reasons["lang_not_en"] += 1
                 continue
-            if not _is_layout_allowed(card, allowed_layouts):
+            if (card.get("layout") or "") not in allowed_layouts:
                 dropped_reasons["layout_excluded"] += 1
                 continue
             if not _has_essentials(card):
@@ -265,8 +271,7 @@ def main() -> None:
             # Aggiorna conteggi per quick EDA
             rarity_counts[rarity] += 1
             # Macro-tipo principale (prima parola di type_line o il macro-type prima della '|')
-            macro = type_line.split("|")[0].strip().split(" ")[-1] if "|" in type_line else type_line.split(" ")[-1]
-            type_counts[macro] += 1
+            type_counts[_macro_type(type_line)] += 1
 
     # Salva statistiche su file
     stats = {

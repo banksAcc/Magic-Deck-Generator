@@ -7,6 +7,9 @@
       "put a +1/+1 counter",
       "enters the battlefield with a +1/+1 counter"
     ],
+    "all_text": [],
+    "type_contains": ["creature"],
+    "priority": 6,
     "theme": "U.A. Students",
     "character": "Izuku Midoriya"
   },
@@ -19,6 +22,8 @@
       "damage to any target",
       "can't block"
     ],
+    "type_contains": ["creature", "instant", "sorcery"],
+    "priority": 6,
     "theme": "U.A. Students",
     "character": "Katsuki Bakugo"
   },
@@ -30,6 +35,8 @@
       "doesn't untap",
       "deals damage"
     ],
+    "type_contains": ["creature", "instant"],
+    "priority": 5,
     "theme": "U.A. Students",
     "character": "Shoto Todoroki"
   },
@@ -42,6 +49,8 @@
       "prevent all combat damage",
       "prevent all damage"
     ],
+    "type_contains": ["creature", "enchantment"],
+    "priority": 5,
     "theme": "Pro Heroes",
     "character": "All Might"
   },
@@ -53,6 +62,8 @@
       "each opponent sacrifices",
       "destroy target creature"
     ],
+    "type_contains": ["creature", "instant", "sorcery"],
+    "priority": 6,
     "theme": "League of Villains",
     "character": "Tomura Shigaraki"
   },
@@ -64,7 +75,90 @@
       "can't activate abilities",
       "tap target creature"
     ],
+    "type_contains": ["instant", "creature"],
+    "priority": 5,
     "theme": "Pro Heroes",
     "character": "Shota Aizawa"
+  },
+  {
+    "id": "uraraka_support",
+    "colors": ["W", "U"],
+    "any_text": [
+      "return target creature",
+      "flying",
+      "gain life"
+    ],
+    "all_text": [],
+    "type_contains": ["creature", "instant", "sorcery"],
+    "priority": 4,
+    "theme": "U.A. Students",
+    "character": "Ochaco Uraraka"
+  },
+  {
+    "id": "iida_speed",
+    "colors": ["W", "U"],
+    "any_text": [
+      "vigilance",
+      "first strike",
+      "untap target creature"
+    ],
+    "type_contains": ["creature"],
+    "priority": 4,
+    "cmc_max": 4,
+    "theme": "U.A. Students",
+    "character": "Tenya Iida"
+  },
+  {
+    "id": "dabi_blaze",
+    "colors": ["B", "R"],
+    "any_text": [
+      "each opponent loses",
+      "each opponent takes",
+      "damage to each opponent"
+    ],
+    "type_contains": ["creature", "sorcery"],
+    "priority": 4,
+    "theme": "League of Villains",
+    "character": "Dabi"
+  },
+  {
+    "id": "toga_mimic",
+    "colors": ["B"],
+    "any_text": [
+      "create a token that's a copy",
+      "gain control of target creature",
+      "becomes a copy"
+    ],
+    "all_text": [],
+    "type_contains": ["creature"],
+    "priority": 4,
+    "theme": "League of Villains",
+    "character": "Himiko Toga"
+  },
+  {
+    "id": "kirishima_guardian",
+    "colors": ["R", "W"],
+    "any_text": [
+      "prevent all damage",
+      "indestructible",
+      "double strike"
+    ],
+    "type_contains": ["creature"],
+    "priority": 3,
+    "theme": "U.A. Students",
+    "character": "Eijiro Kirishima"
+  },
+  {
+    "id": "tsuyu_rescue",
+    "colors": ["G", "U"],
+    "any_text": [
+      "reach",
+      "flash",
+      "tap target creature"
+    ],
+    "type_contains": ["creature"],
+    "priority": 3,
+    "theme": "U.A. Students",
+    "character": "Tsuyu Asui"
   }
 ]

@@ -38,7 +38,7 @@ validator:
   color_mana_subset_rule: true
 
 training:
-  subset_fraction: 0.1   # usa solo 10% del set di train e validation
+  subset_fraction: 0.02   # usa solo 10% del set di train e validation
   eval_every_n_steps: 500
   save_every_n_steps: 1000
   run_name_prefix: "test_1" #prefisso del run
@@ -71,15 +71,15 @@ training:
     weight_decay: 0.01
 
 ppl_eval:
-  run_name: "gpt2-gpt2"
+  run_name: "test_1-gpt2"
   split: "test"
-  subset_fraction: 1.0
+  subset_fraction: 0.02
   batch_size: 4
 
 generation:
   model_type: "gpt2"        # "mistral" | "gpt2"
-  base_model_name: "mistralai/Mistral-7B-Instruct-v0.2"   # o gpt2-large
-  checkpoint_path: "outputs/checkpoints/mistral7b_qLoRA"  # dir dell’adapter o FT
+  base_model_name: "gpt2"   # o gpt2-large
+  checkpoint_path: "outputs/test_1-gpt2"  # dir dell’adapter o FT
   device: "cuda"               # "cuda" | "cpu" | "auto"
   batch_size: 8
   samples_per_mapping: 100     # o calcolato da num_samples / #mapping rows

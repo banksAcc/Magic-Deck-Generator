@@ -54,3 +54,5 @@ python -m src.a03_validate --> valida che i file creati per i 3 task del modello
 
 
 python -m src.a04_train_gpt2 --> fai il training del modello selezionato (quindi vedere in config, nella sezione modelli sotto gpt2), con il set presente in training, test validated.
+
+python -m src.a06_generate_and_validate --> misura quanto “bene” il modello ha imparato il nostro formato di carte, usando la metrica di Perplexity (PPL)
