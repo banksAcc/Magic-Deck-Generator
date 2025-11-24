@@ -32,10 +32,10 @@ mapping:
   default_character: "N/A"
 
 validator:
-  enforce_field_order: true
+  enforce_field_order: false
   require_eos: true
-  forbid_pt_without_creature: true
-  color_mana_subset_rule: true
+  forbid_pt_without_creature: false
+  color_mana_subset_rule: false
 
 training:
   subset_fraction: 0.02   # usa solo 10% del set di train e validation
@@ -105,7 +105,7 @@ ppl_eval:
 generation:
   model_type: "gpt2"        # "mistral" | "gpt2"
   base_model_name: "gpt2"   # o gpt2
-  checkpoint_path: "outputs/test_1-gpt2"  # dir dell’adapter o FT
+  checkpoint_path: "outputs/test_full_data-gpt2"  # dir dell’adapter o FT
   device: "cuda"               # "cuda" | "cpu" | "auto"
   batch_size: 8
   samples_per_mapping: 100     # o calcolato da num_samples / #mapping rows
@@ -113,7 +113,7 @@ generation:
   temperature: 0.8
   top_p: 0.9
   repetition_penalty: 1.1
-  max_new_tokens: 160
+  max_new_tokens: 512
   eos_token: "<|endofcard|>"
 
 curation:

@@ -409,46 +409,26 @@ def generate_with_model(
 
     Ritorna una lista di stringhe (grezze), che includono sia il prompt che
     la parte generata.
+
+    Implementazione allineata al test di debug:
+      - per ogni batch calcoliamo la lunghezza massima di input_ids
+      - max_length = max_input_len + max_new_tokens (da config)
+      - chiamiamo model.generate con sampling + eos/pad
+      - fallback minimal in caso di TypeError (versioni transformers vecchie)
     """
     gen_cfg = cfg.get("generation", {})
 
     temperature = float(gen_cfg.get("temperature", 0.8))
     top_p = float(gen_cfg.get("top_p", 0.9))
     repetition_penalty = float(gen_cfg.get("repetition_penalty", 1.1))
-    max_new_tokens = int(gen_cfg.get("max_new_tokens", 160))
+    max_new_tokens_cfg = int(gen_cfg.get("max_new_tokens", 160))
     batch_size = int(gen_cfg.get("batch_size", 4))
 
-    # Alcune versioni di Transformers non accettano tutti i parametri di generate
-    # (es. cambi di nome / deprecazioni). Filtriamo dinamicamente i kwargs per
-    # evitare TypeError "unexpected keyword argument" simili a quelli visti
-    # con TrainingArguments su ambienti legacy.
-    import inspect
-
-    supported_params = set(inspect.signature(model.generate).parameters)
-    requested_kwargs = {
-        "do_sample": True,
-        "temperature": temperature,
-        "top_p": top_p,
-        "repetition_penalty": repetition_penalty,
-        "max_new_tokens": max_new_tokens,
-        "eos_token_id": eos_token_id,
-        "pad_token_id": tokenizer.pad_token_id,
-    }
-    generation_kwargs = {
-        k: v for k, v in requested_kwargs.items() if k in supported_params
-    }
-    dropped = set(requested_kwargs) - set(generation_kwargs)
-    if dropped:
-        logger.warning(
-            "Parametri generate non supportati in questa versione di transformers: %s",
-            sorted(dropped),
-        )
-
     logger.info(
-        "Parametri di generazione: "
+        "Parametri di generazione (config): "
         f"temperature={temperature}, top_p={top_p}, "
         f"repetition_penalty={repetition_penalty}, "
-        f"max_new_tokens={max_new_tokens}, batch_size={batch_size}"
+        f"max_new_tokens={max_new_tokens_cfg}, batch_size={batch_size}"
     )
 
     all_outputs: List[Block] = []
@@ -465,19 +445,64 @@ def generate_with_model(
         input_ids = inputs["input_ids"].to(device)
         attention_mask = inputs["attention_mask"].to(device)
 
-        with torch.no_grad():
-            outputs = model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                **generation_kwargs,
+        # Calcoliamo la lunghezza massima di input nel batch
+        seq_len = int(input_ids.shape[1])
+        max_length = seq_len + max_new_tokens_cfg
+
+        logger.info(
+            "Batch %d: seq_len=%d, max_new_tokens=%d -> max_length=%d",
+            (start // batch_size) + 1,
+            seq_len,
+            max_new_tokens_cfg,
+            max_length,
+        )
+
+        gen_kwargs: Dict[str, Any] = dict(
+            do_sample=True,
+            temperature=temperature,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            max_length=max_length,
+            eos_token_id=int(eos_token_id),
+            pad_token_id=int(tokenizer.pad_token_id),
+        )
+
+        # Chiamata robusta: se alcuni kwargs non sono supportati, facciamo fallback
+        try:
+            with torch.no_grad():
+                outputs = model.generate(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    **gen_kwargs,
+                )
+        except TypeError as e:
+            logger.warning(
+                "TypeError in model.generate con kwargs %s: %s",
+                list(gen_kwargs.keys()),
+                e,
             )
+            fallback_kwargs = dict(
+                max_length=max_length,
+                eos_token_id=int(eos_token_id),
+                pad_token_id=int(tokenizer.pad_token_id),
+            )
+            logger.info(
+                "Riprovo batch con kwargs ridotti: %s", list(fallback_kwargs.keys())
+            )
+            with torch.no_grad():
+                outputs = model.generate(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    **fallback_kwargs,
+                )
 
         decoded = tokenizer.batch_decode(outputs, skip_special_tokens=False)
         all_outputs.extend(decoded)
 
         logger.info(
-            f"Batch generato {start // batch_size + 1} / "
-            f"{(len(prompts) + batch_size - 1) // batch_size}"
+            "Batch generato %d / %d",
+            (start // batch_size) + 1,
+            (len(prompts) + batch_size - 1) // batch_size,
         )
 
     logger.info(f"Sequenze generate totali: {len(all_outputs)}")
