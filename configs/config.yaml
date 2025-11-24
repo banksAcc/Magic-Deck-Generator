@@ -32,10 +32,22 @@ mapping:
   default_character: "N/A"
 
 validator:
-  enforce_field_order: false
-  require_eos: true
-  forbid_pt_without_creature: false
+
+  # Regola opzionale per il "hard" validator:
+  # se true, controlla che i simboli di mana siano coerenti con il campo color
   color_mana_subset_rule: false
+  
+  # Soglia minima (in caratteri) per considerare il text "non vuoto" nel soft validator
+  # (Es: se una carta ha meno di 20 caratteri di testo, viene segnata come invalida in so
+  soft_min_text_chars: 20
+
+  # Se true, sia hard sia soft richiedono la presenza del campo "character:"
+  require_character: true
+  
+  # Modalità di validazione da usare in GENERAZIONE (a06):
+  # - "soft": più permissiva, prova a riparare name/mana_cost/text/pt (default raccomandata)
+  # - "hard": usa le stesse regole rigide del dataset anche sulle carte generate
+  mode_generation: "soft"
 
 training:
   subset_fraction: 0.02   # usa solo 10% del set di train e validation
@@ -113,7 +125,8 @@ generation:
   temperature: 0.8
   top_p: 0.9
   repetition_penalty: 1.1
-  max_new_tokens: 512
+  max_new_tokens: 160
+  output_dir: "outputs/generations"   # opzionale; default se la ometti outputs/generations
   eos_token: "<|endofcard|>"
 
 curation:

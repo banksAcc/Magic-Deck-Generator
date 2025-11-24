@@ -2,7 +2,7 @@
 """
 a06_generate_and_validate.py
 
-Generazione condizionata + validazione "dura" per blocchi carta MTG×MHA.
+Generazione condizionata + validazione per blocchi carta MTG×MHA.
 
 Flow:
   1. Legge config.yaml (data, generation, mapping, validator, constants).
@@ -11,10 +11,12 @@ Flow:
   4. Carica il modello finetunato (GPT-2 o Mistral + LoRA).
   5. Genera un batch di carte (testo grezzo, uno o più blocchi).
   6. Post-process: un blocco per prompt, tagliato al primo <|endofcard|>.
-  7. Valida tutti i blocchi con la stessa logica di a03_validate.
+  7. Valida tutti i blocchi usando a03_validate:
+       - in modalità "soft" (di default) per la generazione,
+       - eventualmente "hard" se configurato.
   8. Scrive:
-       - batch_YYYYMMDD_HHMMSS.txt             (blocchi grezzi)
-       - batch_YYYYMMDD_HHMMSS_validated.jsonl (risultati validazione)
+       - batch_YYYYMMDD_HHMMSS.txt                    (blocchi grezzi)
+       - batch_YYYYMMDD_HHMMSS_validated[_soft].jsonl (risultati validazione)
   9. Logga stats riassuntive + W&B (opzionale).
 
 Config attesa (estratto rilevante):
@@ -46,6 +48,10 @@ generation:
   max_new_tokens: 160
   eos_token: "<|endofcard|>"
   output_dir: "outputs/generations"  # opzionale, default se assente
+
+validator:
+  # modalità di validazione da usare in GENERAZIONE (default: "soft")
+  mode_generation: "soft"   # "soft" | "hard"
 """
 
 from __future__ import annotations
@@ -610,6 +616,16 @@ def main() -> None:
 
     mapping_cfg = cfg.get("mapping", {})
     gen_cfg = cfg.get("generation", {})
+    validator_cfg = cfg.get("validator", {})
+
+    # Modalità di validazione da usare in GENERAZIONE (default: soft)
+    gen_validator_mode = validator_cfg.get("mode_generation", "soft")
+    if gen_validator_mode not in ("soft", "hard"):
+        logger.warning(
+            "validator.mode_generation=%r non valido; uso 'soft' come default.",
+            gen_validator_mode,
+        )
+        gen_validator_mode = "soft"
 
     # Mapping
     mapping_path = Path(
@@ -626,6 +642,7 @@ def main() -> None:
     logger.info(f"Gen token:   {runtime['gen_token']}")
     logger.info(f"End token:   {end_token}")
     logger.info(f"Theme di default (mapping.default_theme): {mapping_cfg.get('default_theme', 'Generic')}")
+    logger.info(f"Modalità validator in generazione: {gen_validator_mode}")
 
     # Costruzione prompt
     prompts = build_prompts(mapping_rows, cfg, runtime, logger)
@@ -637,6 +654,7 @@ def main() -> None:
             {
                 "gen.prompts": len(prompts),
                 "gen.mapping_rows": len(mapping_rows),
+                "gen.validator_mode": gen_validator_mode,
             }
         )
 
@@ -661,15 +679,17 @@ def main() -> None:
         # Salvataggio blocchi grezzi
         txt_path = save_raw_blocks(blocks, cfg, logger)
 
-        # Validazione in memoria (stessa logica di a03_validate)
+        # Validazione in memoria usando a03_validate (soft/hard secondo config)
         results, stats = validate_blocks(
             blocks,
             cfg=cfg,
+            mode=gen_validator_mode,
             **runtime,  # start_token, gen_token, end_token, regex, rarities, ecc.
         )
 
         # JSONL validato accanto al .txt
-        validated_path = txt_path.with_name(txt_path.stem + "_validated.jsonl")
+        suffix = "_validated_soft.jsonl" if gen_validator_mode == "soft" else "_validated.jsonl"
+        validated_path = txt_path.with_name(txt_path.stem + suffix)
         write_validation_results_jsonl(results, validated_path)
 
         # Logging stats
@@ -692,6 +712,7 @@ def main() -> None:
                 "gen.valid": valid,
                 "gen.invalid": invalid,
                 "gen.pass_rate": pass_rate,
+                "gen.validator_mode": gen_validator_mode,
             }
             # logghiamo anche i primi errori, se ci sono
             error_counts = stats.get("error_counts", {})

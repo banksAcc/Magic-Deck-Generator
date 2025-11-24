@@ -2,7 +2,7 @@
 """
 a03_validate.py
 
-Validator "duro" per blocchi carta in formato Standard:
+Validator per blocchi carta in formato Standard:
 
 <|startofcard|>
 theme: ...
@@ -17,29 +17,49 @@ text: ...
 pt: ...                 # SOLO se type contiene "Creature"
 <|endofcard|>
 
-Regole principali:
-- Ordine dei campi rigido (vedi guida operativa).
-- Tutti i campi obbligatori appaiono una sola volta.
-- `pt` solo per Creature, obbligatorio se Creature.
-- Regex "dure" per `mana_cost` e `pt` (da config.constants.regex).
-- `rarity` in set consentito (da config.constants.rarities).
-- `type` contiene almeno uno tra i macro-tipi (da config.constants.type_macros).
-- Opzionale: regola `color_mana_subset_rule` (color coerente con mana_cost).
-- EOS `<|endofcard|>` obbligatorio.
-- Output: `*_validated.jsonl` con `{valid, errors, raw, fields}` per blocco.
+Modalità supportate:
+- "hard" (rigida, default):
+    - Ordine dei campi rigido (vedi guida operativa).
+    - Tutti i campi obbligatori appaiono una sola volta.
+    - `pt` solo per Creature, obbligatorio se Creature.
+    - Regex "dure" per `mana_cost` e `pt` (da config.constants.regex).
+    - `rarity` in set consentito (da config.constants.rarities).
+    - `type` contiene almeno uno tra i macro-tipi (da config.constants.type_macros).
+    - Opzionale: regola `color_mana_subset_rule` (color coerente con mana_cost).
+    - EOS `<|endofcard|>` obbligatorio.
 
-Esecuzione tipica (dal root della repo):
+- "soft" (più permissiva, pensata per la generazione):
+    - Richiede comunque la presenza dei token speciali.
+    - Header (theme/character/color/type/rarity) letto in modo "quasi rigido"
+      come nel dataset (dopo <|startofcard|>).
+    - Body parsato in modo fuzzy:
+        * `name`: accetta "name, Foo", "name Foo", ecc.
+        * `mana_cost`: accetta varianti "mana_cost2", "mana_cost/text", ecc.
+          Estrae tutti i token {…} e li compone; il resto va nel text.
+        * `text`: accetta "text", "text —", "text Ward —", ecc.
+          Tutte le linee non riconosciute come altri campi vengono trattate
+          come parte del rules text.
+        * `pt`: estrae il primo pattern N/M da "pt: 4/5 Wurms 6+ ...".
+    - Vincoli minimi:
+        * name non vuoto e "sensato",
+        * text con lunghezza minima configurabile (validator.soft_min_text_chars),
+        * pt presente e decodificabile per Creature,
+        * theme/color/type/rarity non vuoti e type con almeno un macro-tipo.
+
+Esecuzione tipica (validator "hard" per dataset, come prima):
 
     python -m src.a03_validate --config configs/config.yaml \
         --input data/processed/train.txt data/processed/val.txt data/processed/test.txt
 
-Se `--input` è omesso, si usano automaticamente train/val/test da `data.processed_dir`.
+Modalità soft (es. per ispezionare i file generati):
+
+    python -m src.a03_validate --config configs/config.yaml --mode soft -i outputs/generations/batch_*.txt
 
 In più, questo modulo espone alcune funzioni riusabili da altri script
 (es. a06_generate_and_validate.py):
 
 - build_validator_runtime(cfg) -> dict
-- validate_blocks(blocks, cfg=..., **runtime) -> (results, stats)
+- validate_blocks(blocks, cfg=..., mode="hard", **runtime) -> (results, stats)
 - write_validation_results_jsonl(results, out_path)
 """
 
@@ -48,6 +68,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
@@ -69,7 +90,7 @@ Block = str
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validator 'duro' per blocchi carta MTG×MHA."
+        description="Validator per blocchi carta MTG×MHA (hard/soft)."
     )
     parser.add_argument(
         "--config",
@@ -85,6 +106,16 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Path dei file .txt da validare. "
             "Se omesso: usa train/val/test da data.processed_dir."
+        ),
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["hard", "soft"],
+        default="hard",
+        help=(
+            "Modalità di validazione: 'hard' per il dataset (rigida, default), "
+            "'soft' per la generazione (più permissiva)."
         ),
     )
     return parser.parse_args()
@@ -176,7 +207,7 @@ def read_blocks(path: Path, start_token: str) -> List[Block]:
 
 
 # ---------------------------------------------------------------------------
-# Validazione di un singolo blocco
+# Validazione di un singolo blocco — parsing HARD
 # ---------------------------------------------------------------------------
 
 def _parse_fields_in_order(
@@ -321,7 +352,7 @@ def _parse_fields_in_order(
     return fields, errors
 
 
-def validate_block(
+def _validate_block_hard(
     block: Block,
     *,
     cfg: Dict[str, Any],
@@ -336,15 +367,7 @@ def validate_block(
     require_character: bool,
 ) -> Dict[str, Any]:
     """
-    Valida un singolo blocco.
-
-    Ritorna un dict:
-        {
-          "valid": bool,
-          "errors": [str],
-          "raw": <string>,
-          "fields": { ... }   # anche se parziale
-        }
+    Validator originale "duro" (per il dataset).
     """
     errors: List[str] = []
 
@@ -441,6 +464,346 @@ def validate_block(
 
 
 # ---------------------------------------------------------------------------
+# Validazione di un singolo blocco — parsing SOFT
+# ---------------------------------------------------------------------------
+
+def _validate_block_soft(
+    block: Block,
+    *,
+    cfg: Dict[str, Any],
+    start_token: str,
+    gen_token: str,
+    end_token: str,
+    mana_regex,  # unused in soft
+    pt_regex,
+    rarities: List[str],
+    macro_types: List[str],
+    color_mana_subset_rule: bool,  # unused in soft
+    require_character: bool,
+) -> Dict[str, Any]:
+    """
+    Validator "soft" per blocchi generati.
+
+    Approccio:
+      - Richiede la presenza dei token speciali, ma non l'ordine rigido
+        di tutti i campi come in hard.
+      - Header parsato con logica simile a quella hard (start/theme/character/color/type/rarity).
+      - Body parsato in modo fuzzy per name/mana_cost/text/pt.
+      - Vincoli minimi su name/text/pt.
+    """
+    errors: List[str] = []
+    fields: Dict[str, Any] = {}
+
+    # Token speciali all'interno del blocco (posizioni string-based)
+    start_idx = block.find(start_token)
+    gen_idx = block.find(gen_token, start_idx + len(start_token) if start_idx != -1 else 0)
+    end_idx = block.find(end_token, gen_idx + len(gen_token) if gen_idx != -1 else 0)
+
+    if start_idx == -1:
+        errors.append("start token mancante (soft).")
+    if gen_idx == -1:
+        errors.append("token di generazione mancante (soft).")
+    if end_idx == -1:
+        errors.append("EOS mancante (soft).")
+
+    if errors:
+        return {
+            "valid": False,
+            "errors": errors,
+            "raw": block,
+            "fields": fields,
+        }
+
+    # Segmenti header / body
+    header_segment = block[start_idx:gen_idx]
+    body_segment = block[gen_idx + len(gen_token):end_idx]
+
+    # --- Parsing header (start/theme/(character)/color/type/rarity) ---
+
+    header_lines = [ln.rstrip("\n") for ln in header_segment.splitlines()]
+    header_lines = [ln for ln in header_lines if ln.strip() != ""]
+
+    if not header_lines:
+        errors.append("header vuoto (soft).")
+    idx = 0
+
+    # Start token
+    if not header_lines or header_lines[0].strip() != start_token:
+        errors.append(
+            f"start token mancante o errato (soft) "
+            f"(atteso '{start_token}')."
+        )
+    else:
+        idx = 1
+
+    def consume_field(name: str, required: bool = True) -> bool:
+        nonlocal idx
+        if idx >= len(header_lines):
+            if required:
+                errors.append(f"campo '{name}' mancante (soft).")
+            return False
+        line = header_lines[idx].strip()
+        lower = line.lower()
+        prefix = f"{name}:"
+        if not lower.startswith(prefix):
+            if required:
+                errors.append(
+                    f"campo '{name}' mancante o fuori ordine (soft) "
+                    f"(trovato: '{line}')."
+                )
+            return False
+        value = line.split(":", 1)[1].strip()
+        fields[name] = value
+        idx += 1
+        return True
+
+    # theme (obbligatorio)
+    consume_field("theme", required=True)
+
+    # character (opzionale ma configurabile)
+    old_idx = idx
+    has_character = consume_field("character", required=False)
+    if require_character and not has_character:
+        # se non abbiamo avanzato, character manca
+        errors.append("campo 'character' mancante ma richiesto dal config (soft).")
+    # color (obbligatorio)
+    consume_field("color", required=True)
+    # type (obbligatorio)
+    consume_field("type", required=True)
+    # rarity (obbligatorio)
+    consume_field("rarity", required=True)
+
+    # --- Parsing body (name/mana_cost/text/pt) fuzzy ---
+
+    body_lines = [ln.rstrip("\n") for ln in body_segment.splitlines()]
+    # Manteniamo anche linee vuote: possono separare pezzi di testo, ma non sono essenziali.
+
+    name_value: str | None = None
+    mana_value: str = ""
+    pt_value: str | None = None
+    text_lines: List[str] = []
+
+    for raw_line in body_lines:
+        line = raw_line.rstrip("\n")
+        stripped = line.strip()
+        if not stripped:
+            # linea vuota -> separatore di testo
+            continue
+
+        lower = stripped.lower()
+
+        # pt: estrae il primo pattern N/M, il resto va nel testo
+        if pt_value is None and lower.startswith("pt"):
+            # es. "pt: 4/5 Wurms 6+ ..."
+            m_rest = re.match(r"^\s*pt\s*[:\-]?\s*(.*)$", stripped, flags=re.IGNORECASE)
+            rest = m_rest.group(1).strip() if m_rest else stripped
+            m_pt = re.search(r"(\d+)\s*/\s*(\d+)", rest)
+            if m_pt:
+                p1 = int(m_pt.group(1))
+                p2 = int(m_pt.group(2))
+                pt_value = f"{p1}/{p2}"
+                # parte dopo il pattern N/M va nel text
+                tail = rest[m_pt.end():].strip()
+                if tail:
+                    text_lines.append(tail)
+            else:
+                # nessun N/M -> linea rumorosa, mettiamola nel testo
+                text_lines.append(rest)
+            continue
+
+        # name: linee che iniziano con "name"
+        if name_value is None and lower.startswith("name"):
+            # es. "name, the Unworthy", "name Soratami, the Storm's Champion"
+            m_name = re.match(r"^\s*name\b[^\w]*\s*(.*)$", stripped, flags=re.IGNORECASE)
+            if m_name:
+                raw = m_name.group(1).strip()
+                raw = raw.lstrip(",:- \t")
+                name_value = raw
+            else:
+                parts = stripped.split(None, 1)
+                name_value = parts[1].strip() if len(parts) > 1 else ""
+            continue
+
+        # mana_cost: varianti "mana_cost2", "mana_cost/text", "mana_costly_name", ecc.
+        if "mana_cost" in lower or lower.startswith("mana cost"):
+            # es. "mana_cost2 {4}{R}", "mana_cost/text {1}{R}: Target..."
+            m_mc = re.match(r"^\s*mana[_\s-]*cost\w*[^:]*[:\s]*(.*)$", stripped, flags=re.IGNORECASE)
+            rest = m_mc.group(1).strip() if m_mc else stripped
+            # estraiamo tutti i token {…}
+            tokens = re.findall(r"\{[^}]+\}", rest)
+            if tokens:
+                mana_value = "".join(tokens)
+                # rimuoviamo i token dal resto e mandiamo il resto nel text
+                leftover = re.sub(r"\{[^}]+\}", "", rest).strip()
+                if leftover:
+                    text_lines.append(leftover)
+            else:
+                # nessun token di mana: trattiamo tutto come testo
+                text_lines.append(rest)
+            continue
+
+        # text: linee che iniziano con "text"
+        if lower.startswith("text"):
+            # es. "text When...", "text—{T}: ...", "text Ward — ..."
+            m_text = re.match(r"^\s*text\b[^\w-]*[-—:]?\s*(.*)$", stripped, flags=re.IGNORECASE)
+            value = m_text.group(1).strip() if m_text else ""
+            if value:
+                text_lines.append(value)
+            continue
+
+        # fallback: tutto il resto viene considerato parte del rules text
+        text_lines.append(stripped)
+
+    # Componiamo i campi body
+    fields["name"] = name_value or ""
+    fields["mana_cost"] = mana_value or ""
+    text_value = "\n".join(text_lines).strip()
+    fields["text"] = text_value
+    if pt_value is not None:
+        fields["pt"] = pt_value
+
+    # --- Controlli "soft" sui valori ---
+
+    validator_cfg = cfg.get("validator", {})
+    soft_min_text_chars = int(validator_cfg.get("soft_min_text_chars", 20))
+
+    # rarity e macro-types come in hard (rarity / type dal header sono puliti)
+    rarity = fields.get("rarity", "")
+    if not rarity:
+        errors.append("rarity vuota (soft).")
+    elif rarities and rarity not in rarities:
+        errors.append(
+            f"rarity '{rarity}' non è tra quelle consentite (soft): {sorted(rarities)}."
+        )
+
+    type_line = fields.get("type", "")
+    if not type_line:
+        errors.append("type vuoto (soft).")
+    else:
+        tl_lower = type_line.lower()
+        mt_lower = [t.lower() for t in macro_types] if macro_types else []
+        if mt_lower and not any(mt in tl_lower for mt in mt_lower):
+            errors.append(
+                "type non contiene alcun macro-tipo valido "
+                f"(soft, attesi uno tra: {macro_types})."
+            )
+
+    # Campi base header
+    for key in ("theme", "color"):
+        if not fields.get(key, ""):
+            errors.append(f"campo '{key}' vuoto (soft).")
+
+    # name: non vuoto e con almeno 2 lettere alfabetiche
+    name = fields.get("name", "")
+    if not name or sum(ch.isalpha() for ch in name) < 2:
+        errors.append("campo 'name' mancante o troppo corto (soft).")
+
+    # text: lunghezza minima
+    if len(text_value.strip()) < soft_min_text_chars:
+        errors.append(
+            f"text troppo corto per la modalità soft "
+            f"(len={len(text_value.strip())}, min={soft_min_text_chars})."
+        )
+
+    # pt vs Creature: pt comunque obbligatorio per Creature
+    type_is_creature = "creature" in type_line.lower()
+    pt_value = fields.get("pt", None)
+    if type_is_creature and not pt_value:
+        errors.append("pt obbligatorio per carte Creature (soft).")
+
+    # Se pt c'è, verifichiamo che sia in forma N/M (se abbiamo pt_regex lo riusiamo)
+    if pt_value is not None:
+        if not pt_value:
+            errors.append("pt vuoto (soft).")
+        else:
+            # Proviamo con il pt_regex se esiste, altrimenti facciamo un check semplice N/M
+            if pt_regex is not None:
+                if not pt_regex.fullmatch(pt_value):
+                    errors.append(
+                        f"pt '{pt_value}' non rispetta il pattern richiesto (soft)."
+                    )
+            else:
+                if not re.fullmatch(r"\d+/\d+", pt_value):
+                    errors.append(
+                        f"pt '{pt_value}' non è nel formato 'N/M' (soft)."
+                    )
+
+    valid = len(errors) == 0
+
+    return {
+        "valid": valid,
+        "errors": errors,
+        "raw": block,
+        "fields": fields,
+    }
+
+
+# ---------------------------------------------------------------------------
+# API pubblica: validate_block (hard/soft)
+# ---------------------------------------------------------------------------
+
+def validate_block(
+    block: Block,
+    *,
+    cfg: Dict[str, Any],
+    start_token: str,
+    gen_token: str,
+    end_token: str,
+    mana_regex,
+    pt_regex,
+    rarities: List[str],
+    macro_types: List[str],
+    color_mana_subset_rule: bool,
+    require_character: bool,
+    mode: str = "hard",
+) -> Dict[str, Any]:
+    """
+    Valida un singolo blocco.
+
+    Parametri:
+      - mode: "hard" (rigido, dataset) o "soft" (più permissivo, generazione).
+
+    Ritorna un dict:
+        {
+          "valid": bool,
+          "errors": [str],
+          "raw": <string>,
+          "fields": { ... }   # anche se parziale
+        }
+    """
+    if mode == "hard":
+        return _validate_block_hard(
+            block,
+            cfg=cfg,
+            start_token=start_token,
+            gen_token=gen_token,
+            end_token=end_token,
+            mana_regex=mana_regex,
+            pt_regex=pt_regex,
+            rarities=rarities,
+            macro_types=macro_types,
+            color_mana_subset_rule=color_mana_subset_rule,
+            require_character=require_character,
+        )
+    elif mode == "soft":
+        return _validate_block_soft(
+            block,
+            cfg=cfg,
+            start_token=start_token,
+            gen_token=gen_token,
+            end_token=end_token,
+            mana_regex=mana_regex,
+            pt_regex=pt_regex,
+            rarities=rarities,
+            macro_types=macro_types,
+            color_mana_subset_rule=color_mana_subset_rule,
+            require_character=require_character,
+        )
+    else:
+        raise ValueError(f"Modalità di validazione non supportata: {mode!r}")
+
+
+# ---------------------------------------------------------------------------
 # Validazione di liste di blocchi (riusabile)
 # ---------------------------------------------------------------------------
 
@@ -457,9 +820,13 @@ def validate_blocks(
     macro_types: List[str],
     color_mana_subset_rule: bool,
     require_character: bool,
+    mode: str = "hard",
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
     Valida una lista di blocchi di testo già in memoria.
+
+    Parametri:
+      - mode: "hard" (rigido, dataset) o "soft" (più permissivo, generazione).
 
     Ritorna:
       - results: lista di dict come `validate_block`
@@ -484,6 +851,7 @@ def validate_blocks(
             macro_types=macro_types,
             color_mana_subset_rule=color_mana_subset_rule,
             require_character=require_character,
+            mode=mode,
         )
         results.append(result)
 
@@ -534,6 +902,7 @@ def validate_file(
     macro_types: List[str],
     color_mana_subset_rule: bool,
     require_character: bool,
+    mode: str = "hard",
 ) -> Dict[str, Any]:
     """
     Valida tutti i blocchi presenti in `path` e scrive un file JSONL
@@ -555,8 +924,9 @@ def validate_file(
             "error_counts": {},
         }
 
-    out_path = path.with_name(path.stem + "_validated.jsonl")
-    logger.info(f"Validazione di {path} -> {out_path} ({n_blocks} blocchi).")
+    suffix = "_validated_soft.jsonl" if mode == "soft" else "_validated.jsonl"
+    out_path = path.with_name(path.stem + suffix)
+    logger.info(f"Validazione ({mode}) di {path} -> {out_path} ({n_blocks} blocchi).")
 
     results, stats = validate_blocks(
         blocks,
@@ -570,6 +940,7 @@ def validate_file(
         macro_types=macro_types,
         color_mana_subset_rule=color_mana_subset_rule,
         require_character=require_character,
+        mode=mode,
     )
 
     write_validation_results_jsonl(results, out_path)
@@ -580,7 +951,7 @@ def validate_file(
         pass_rate = 0.0
 
     logger.info(
-        f"File {path}: valid={stats['valid']}, invalid={stats['invalid']}, "
+        f"File {path} ({mode}): valid={stats['valid']}, invalid={stats['invalid']}, "
         f"pass_rate={pass_rate:.3f}"
     )
 
@@ -622,6 +993,8 @@ def main() -> None:
             processed_dir / "test.txt",
         ]
 
+    mode = args.mode  # "hard" di default
+
     # Runtime validator condiviso
     runtime = build_validator_runtime(cfg)
     start_token = runtime["start_token"]
@@ -634,6 +1007,7 @@ def main() -> None:
     color_mana_subset_rule = runtime["color_mana_subset_rule"]
     require_character = runtime["require_character"]
 
+    logger.info(f"Modalità validator: {mode}")
     logger.info(f"Start token: {start_token}")
     logger.info(f"Gen token:   {gen_token}")
     logger.info(f"End token:   {end_token}")
@@ -664,6 +1038,7 @@ def main() -> None:
             macro_types=macro_types,
             color_mana_subset_rule=color_mana_subset_rule,
             require_character=require_character,
+            mode=mode,
         )
         all_stats.append(stats)
         total_blocks += stats["total"]
@@ -687,8 +1062,10 @@ def main() -> None:
             logger.info(f"  - {err}: {count}")
 
     # Salviamo anche uno small JSON riassuntivo accanto a processed_dir
-    summary_path = processed_dir / "validate_summary.json"
+    summary_name = "validate_summary_soft.json" if mode == "soft" else "validate_summary.json"
+    summary_path = processed_dir / summary_name
     summary_payload = {
+        "mode": mode,
         "files": all_stats,
         "total_blocks": total_blocks,
         "valid": total_valid,
@@ -704,9 +1081,10 @@ def main() -> None:
     logger.info(f"Riepilogo globale salvato in: {summary_path}")
 
     # W&B logging (lite)
-    run = init_wandb(cfg, run_name="validate-a03")
+    run = init_wandb(cfg, run_name=f"validate-a03-{mode}")
     if run is not None:
         metrics = {
+            "validate.mode": mode,
             "validate.total_blocks": total_blocks,
             "validate.valid": total_valid,
             "validate.invalid": total_invalid,
