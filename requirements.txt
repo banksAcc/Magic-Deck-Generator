@@ -2,3 +2,4 @@ pyyaml
 wandb
 torch
 transformers
+bitsandbytes
