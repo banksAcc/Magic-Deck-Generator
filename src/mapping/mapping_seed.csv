@@ -1,44 +1,183 @@
 character_or_faction,color_id,default_type,rarity_hint,mechanics_hints,notes
-Katsuki Bakugo,R,Legendary Creature | Hero,rare,burn damage and explosive tempo,Seed card: Lightning Bolt
-Katsuki Bakugo,R,Legendary Creature | Hero,rare,cheap burn and combat tricks,Seed card: Shock
-Katsuki Bakugo,R,Legendary Creature | Hero,rare,fast aggression and attack triggers,Seed card: Goblin Guide
-Katsuki Bakugo,R,Legendary Creature | Hero,rare,direct damage to players and creatures,Seed card: Lava Spike
-Katsuki Bakugo,R,Legendary Creature | Hero,rare,discard for value and draw smoothing,Seed card: Thrill of Possibility
-Izuku Midoriya,G W,Legendary Creature | Hero,rare,+1/+1 counters and growth,Seed card: Llanowar Elves
-Izuku Midoriya,G W,Legendary Creature | Hero,rare,counters and teamwork payoffs,Seed card: Pelt Collector
-Izuku Midoriya,G W,Legendary Creature | Hero,rare,go-wide hero leadership,Seed card: Hero of Precinct One
-Izuku Midoriya,G W,Legendary Creature | Hero,rare,evolving strength over time,Seed card: Renegade Krasis
-All Might,W,Legendary Creature | Hero,mythic,heroic pumps and protection,Seed card: Glorious Anthem
-All Might,W,Legendary Creature | Hero,mythic,removal and justice theme,Seed card: Banishing Light
-All Might,W,Legendary Creature | Hero,mythic,combat dominance and shields,Seed card: Gideon's Triumph
-All Might,W,Legendary Creature | Hero,mythic,battlefield leadership and flying allies,Seed card: Angelic Captain
-Tomura Shigaraki,B,Legendary Creature | Villain,mythic,destruction and wither,Seed card: Doom Blade
-Tomura Shigaraki,B,Legendary Creature | Villain,mythic,deadly removal and cruelty,Seed card: Murder
-Tomura Shigaraki,B,Legendary Creature | Villain,mythic,hand disruption and corruption,Seed card: Thoughtseize
-Tomura Shigaraki,B,Legendary Creature | Villain,mythic,bleed effects versus enchantments,Seed card: Feed the Swarm
-Shota Aizawa,U,Legendary Creature | Hero,rare,stun control and negation,Seed card: Counterspell
-Shota Aizawa,U,Legendary Creature | Hero,rare,tempo counter-magic,Seed card: Mana Leak
-Shota Aizawa,U,Legendary Creature | Hero,rare,creature denial and timing,Seed card: Essence Scatter
-Shota Aizawa,U,Legendary Creature | Hero,rare,draw plus counter hybrid,Seed card: Exclude
-Shoto Todoroki,U R,Legendary Creature | Hero,rare,freeze and tapdown,Seed card: Frost Lynx
-Shoto Todoroki,U R,Legendary Creature | Hero,rare,control artifacts and ice,Seed card: Icy Manipulator
-Shoto Todoroki,U R,Legendary Creature | Hero,rare,fire burst removal,Seed card: Flame Slash
-Shoto Todoroki,U R,Legendary Creature | Hero,rare,elemental finishing strike,Seed card: Chandra's Triumph
-Tenya Iida,W U,Legendary Creature | Hero,rare,vigilance and speed,Seed card: Sky Hussar
-Tenya Iida,W U,Legendary Creature | Hero,rare,lifelink and aerial rescue,Seed card: Aerial Responder
-Tenya Iida,W U,Legendary Creature | Hero,rare,knight discipline and ramp parity,Seed card: Knight of the White Orchid
-Ochaco Uraraka,U,Legendary Creature | Hero,rare,bounce and battlefield reset,Seed card: Aether Adept
-Ochaco Uraraka,U,Legendary Creature | Hero,rare,flying rescue and tempo,Seed card: Rescuer Sphinx
-Ochaco Uraraka,U,Legendary Creature | Hero,rare,steal opposing creatures,Seed card: Seasinger
-Tsuyu Asui,G U,Legendary Creature | Hero,rare,reach and amphibious mobility,Seed card: Reach of Branches
-Tsuyu Asui,G U,Legendary Creature | Hero,rare,flashy ambush tactics,Seed card: Bounding Krasis
-Tsuyu Asui,G U,Legendary Creature | Hero,rare,anti-flying defense,Seed card: Clip Wings
-Eijiro Kirishima,R W,Legendary Creature | Hero,rare,double strike weapons and toughness,Seed card: Embercleave
-Eijiro Kirishima,R W,Legendary Creature | Hero,rare,damage reflection and resilience,Seed card: Boros Reckoner
-Eijiro Kirishima,R W,Legendary Creature | Hero,rare,self-sacrifice protection,Seed card: Selfless Spirit
-Dabi,B R,Legendary Creature | Villain,rare,sacrifice and spectacle damage,Seed card: Fireblade Artist
-Dabi,B R,Legendary Creature | Villain,rare,aristocrats and burn triggers,Seed card: Judith, the Scourge Diva
-Dabi,B R,Legendary Creature | Villain,rare,devilish ping and tokens,Seed card: Mayhem Devil
-Himiko Toga,B U,Legendary Creature | Villain,rare,steal identity and evasion,Seed card: Nightveil Specter
-Himiko Toga,B U,Legendary Creature | Villain,rare,draw from opponents and stealth,Seed card: Thief of Sanity
-Himiko Toga,B U,Legendary Creature | Villain,rare,life drain and luxury theft,Seed card: Gonti, Lord of Luxury
+Izuku Midoriya,G W,Legendary Creature - Human Hero,Mythic,counters;sacrifice self;search library,One For All successor
+Izuku Midoriya,W U R,Legendary Creature - Human Hero,Mythic,flying;haste;vigilance,Full Cowl 100% mode
+Detroit Smash,G W,Instant,Rare,fight;huge pump spell,Deku signature move
+Delaware Smash,U G,Instant,Uncommon,tap target;damage to flier,Air force attack
+Katsuki Bakugo,R,Legendary Creature - Human Hero,Rare,haste;direct damage;sacrifice land,Explosion quirk
+Katsuki Bakugo,R W,Legendary Creature - Human Hero,Mythic,double strike;trample,Hero uniform version
+AP Shot,R,Instant,Rare,damage can't be prevented;piercing,Bakugo special move
+Howitzer Impact,R R,Sorcery,Mythic,board wipe damage;flying requirement,Bakugo ultimate
+Shoto Todoroki,U R,Legendary Creature - Human Hero,Mythic,tap target;damage target;modal spells,Half-Cold Half-Hot
+Flashfreeze Heatwave,U R,Sorcery,Rare,tap all creatures;deal damage to tapped,Combo move
+Heaven-Piercing Ice Wall,U,Instant,Uncommon,fog effect;tap creatures,Defensive ice
+Ochaco Uraraka,W U,Legendary Creature - Human Hero,Rare,flying;levitate others;return to hand,Zero Gravity
+Meteor Shower,W R,Sorcery,Rare,destroy artifacts;damage based on artifacts,Improvised attack
+Tenya Iida,W U,Legendary Creature - Human Hero,Rare,haste;flash;vigilance,Engine quirk
+Recipro Burst,U,Instant,Uncommon,give haste;unblockable until end of turn,Speed boost
+Tsuyu Asui,G U,Legendary Creature - Human Hero,Rare,reach;islandwalk;flash,Frog quirk
+Camouflage,G U,Instant,Common,hexproof;regenerate,Stealth mode
+Eijiro Kirishima,R W,Legendary Creature - Human Hero,Rare,indestructible;defender to attacker,Hardening
+Red Riot Unbreakable,R,Enchantment - Aura,Rare,base toughness becomes 10;indestructible,Ultimate hardening
+Momo Yaoyorozu,U G,Legendary Creature - Human Hero,Mythic,create tokens;search artifact;clue tokens,Creation quirk
+Creation Cannon,X,Artifact,Rare,enter battlefield effect;damage,Created weapon
+Fumikage Tokoyami,B,Legendary Creature - Human Hero,Rare,menace;shadow;token generation,Dark Shadow
+Dark Shadow,B,Creature - Spirit,Uncommon,flying;bound to Tokoyami,The sentient quirk
+Black Ankh,B,Enchantment - Aura,Uncommon,buff creature;menace,Defensive technique
+Denki Kaminari,R U,Legendary Creature - Human Hero,Uncommon,damage to all;stun self,Electrification
+Indiscriminate Shock,R,Sorcery,Rare,damage to all creatures including yours,1.3 million volts
+Kyoka Jiro,R B,Legendary Creature - Human Hero,Uncommon,tap;damage to creature;scry,Earphone Jack
+Heartbeat Distortion,B,Instant,Common,weaken toughness;counter ability,Sound attack
+Mina Ashido,B R,Legendary Creature - Human Hero,Uncommon,acid counters;destroy equipment,Acid quirk
+Acid Veil,B G,Instant,Uncommon,prevent damage;wither,Defensive acid
+Hanta Sero,G W,Legendary Creature - Human Hero,Uncommon,tap target;create wall token,Tape quirk
+Mezo Shoji,G,Legendary Creature - Human Hero,Uncommon,scout;vigilance;reach,Dupli-Arms
+Koji Koda,G,Legendary Creature - Human Hero,Common,control animals;forestwalk,Anivoice
+Rikido Sato,R G,Legendary Creature - Human Hero,Common,trample;pump +X/+0;sacrifice food,Sugar Rush
+Mashirao Ojiro,W,Legendary Creature - Human Hero,Common,first strike;bushido,Tail martial arts
+Toru Hagakure,W U,Legendary Creature - Human Hero,Uncommon,unblockable;hexproof,Invisibility
+Minoru Mineta,U,Legendary Creature - Human Hero,Common,tap target;doesn't untap,Sticky balls
+Yuga Aoyama,W,Legendary Creature - Human Hero,Uncommon,flash;beam damage,Navel Laser
+All Might,W R,Legendary Creature - Human Hero,Mythic,indestructible;double strike;anthem effect,Symbol of Peace
+All Might (Weakened),W,Legendary Creature - Human Hero,Rare,mentor;reveal top cards,Teacher form
+United States of Smash,W R W,Sorcery,Mythic,exile target;massive damage,The final move
+Texas Smash,R W,Instant,Common,damage to target creature;knockback,Basic punch
+Shota Aizawa,U B,Legendary Creature - Human Hero,Rare,creatures lose abilities;tap,Erasure
+Erasure Glare,U B,Enchantment - Aura,Uncommon,enchanted creature loses abilities,Quirk nullification
+Present Mic,R,Legendary Creature - Human Hero,Uncommon,damage to all flyers;goad,Voice quirk
+Midnight,B U,Legendary Creature - Human Hero,Rare,sleep;tap creatures;control magic,Somnambulist
+Nemuri Kayama,U B,Planeswalker - Midnight,Mythic,tap abilities;sleep counters,Hero persona
+Endeavor,R,Legendary Creature - Human Hero,Mythic,firebreathing;damage upon damage,Hellflame
+Prominence Burn,R R,Sorcery,Rare,exile creature;damage to player,Finisher move
+Hawks,W U,Legendary Creature - Human Hero,Mythic,flying;haste;scry,Fierce Wings
+Feather Blades,W,Instant,Uncommon,damage attacking creature;first strike,Telekinetic feathers
+Best Jeanist,W U,Legendary Creature - Human Hero,Rare,tap creatures;detain;control artifact,Fiber Master
+Edgeshot,W B,Legendary Creature - Human Hero,Rare,flash;unblockable;phase out,Foldabody
+Mirko,R G,Legendary Creature - Human Hero,Rare,haste;trample;fight on etb,Rabbit Hero
+Luna Ring,R,Instant,Uncommon,kick damage;stun,Leg attack
+Mt. Lady,W G,Legendary Creature - Human Hero,Rare,giant growth;reach;trample,Gigantification
+Kamui Woods,G,Legendary Creature - Human Hero,Uncommon,reach;bind;create saprolings,Wood chain
+Gran Torino,W U,Legendary Creature - Human Hero,Rare,flash;bounce self;haste,Jet quirk
+Recovery Girl,W,Legendary Creature - Human Hero,Uncommon,heal damage;prevent damage,Healing
+Nezu,U,Legendary Creature - Rat Advisor,Rare,draw cards;maximum hand size,High Spec
+Tomura Shigaraki,B,Legendary Creature - Human Villain,Mythic,destroy target;deathtouch;decay,Decay quirk
+Shigaraki (Awakened),B R,Legendary Creature - Human Villain,Mythic,annihilator;board wipe effect,All For One heir
+Dust to Dust,B B,Sorcery,Rare,exile all artifacts and creatures,Mass decay
+All For One,B U B,Legendary Creature - Human Villain,Mythic,steal abilities;reanimate graveyard,Demon Lord
+Quirk Theft,U B,Sorcery,Rare,gain control of creature;it becomes black,Stealing power
+Kurogiri,U B,Legendary Creature - Human Villain,Rare,teleport;deflect attack;blink,Warp Gate
+Warp Gate,U B,Instant,Uncommon,counter target spell;redirect target,Portal defense
+Dabi,B R,Legendary Creature - Human Villain,Rare,damage to self;damage to all,Blueflame
+Cremation,B R,Sorcery,Uncommon,exile creature;damage controller,Burning
+Himiko Toga,B R,Legendary Creature - Human Villain,Rare,copy creature;gain haste;sacrifice,Transform
+Blood Transform,B,Instant,Rare,become copy of target creature until eot,Disguise
+Twice,B R,Legendary Creature - Human Villain,Rare,create token copies;populate,Double quirk
+Sad Man's Parade,B R,Sorcery,Mythic,create X tokens that are copies,Infinite doubles
+Mr. Compress,U R,Legendary Creature - Human Villain,Uncommon,exile target;return later;shrink,Compress
+Marbleize,U,Instant,Uncommon,phase out target;return to hand,Capture
+Spinner,G B,Legendary Creature - Lizard Villain,Uncommon,menace;trample,Gecko quirk
+Muscular,R G,Legendary Creature - Human Villain,Rare,pump +X/+X;trample;monstrosity,Muscle augmentation
+Moonfish,B,Legendary Creature - Human Villain,Uncommon,reach;deathtouch,Blade teeth
+Mustard,B G,Legendary Creature - Human Villain,Uncommon,poison counters;fog,Gas quirk
+Stain,W B R,Legendary Creature - Human Villain,Mythic,first strike;destroy hero;deathtouch,Hero Killer
+Bloodcurdle,B R,Instant,Rare,tap target;put stun counter,Paralysis
+Overhaul,W B,Legendary Creature - Human Villain,Mythic,sacrifice to regenerate;destroy and return,Matter reconstruction
+Kai Chisaki,W B,Planeswalker - Overhaul,Mythic,destroy target;create horror token,Yakuza boss
+Chronostasis,U,Legendary Creature - Human Villain,Uncommon,tap creature;doesn't untap next turn,Slow beam
+Rappa,R G,Legendary Creature - Human Villain,Uncommon,double strike;attack each turn,Strongarm
+Gentle Criminal,U W,Legendary Creature - Human Villain,Uncommon,flying;deflect;bounce,Elasticity
+La Brava,R,Legendary Creature - Human Villain,Uncommon,target gets +X/+X;love counters,Love quirk
+Re-Destro,B R,Legendary Creature - Human Villain,Rare,power equals life lost;trample,Stress output
+Stress Output 100%,B R,Sorcery,Rare,huge damage based on life difference,Stress bomb
+Geten,U,Legendary Creature - Human Villain,Rare,control ice;tap lands,Ice manipulation
+Gigantomachia,R G,Legendary Creature - Avatar,Mythic,trample;hexproof;cannot be countered,Walking disaster
+Nomu (USJ),B G,Creature - Zombie Mutant,Rare,regenerate;reach;trample,Anti-Symbol of Peace
+High-End Nomu,B U,Creature - Zombie Mutant,Mythic,flying;haste;intelligent,Hood
+Generic Nomu,B,Creature - Zombie Mutant,Common,decay;zombie synergy,Mass produced
+Mei Hatsume,U R,Legendary Creature - Human Artificer,Rare,search equipment;reduce equip cost,Zoom quirk
+Power Loader,W,Legendary Creature - Human Artificer,Uncommon,vehicle synergy;dig,Excavation
+Support Item: Grenadier Bracers,R,Artifact - Equipment,Uncommon,equipped gets +2/+0;reach,Bakugo gear
+Support Item: Iron Soles,R,Artifact - Equipment,Uncommon,equipped gets +1/+0;kick bonus,Deku gear
+Support Item: Capture Scarf,U B,Artifact - Equipment,Rare,tap equipped creature;tap target,Aizawa gear
+Support Item: Jet Boots,U,Artifact - Equipment,Common,flying;haste,generic gear
+U.A. High School,N/A,Legendary Land,Rare,add generic;add color for heroes,The fortress
+U.S.J. Facility,N/A,Land,Uncommon,add colorless;create disaster token,Training ground
+Tartarus Prison,N/A,Legendary Land,Rare,exile creature;jail effect,Maximum security
+League Hideout,B R,Land,Uncommon,add B or R;pain land,Villain bar
+Kamino Ward,N/A,Legendary Land,Mythic,battlefield effect;historical site,All Might vs AFO
+Forest Training Camp,G,Land,Common,add G;buff beast,Wild Pussycats turf
+I-Island,U,Legendary Land,Rare,artifact affinity;add U,Movie location
+Class 1-B,W U B R G,Faction,Uncommon,generic student synergy,The rivals
+Neito Monoma,U B,Legendary Creature - Human Student,Rare,copy activated abilities,Copy quirk
+Itsuka Kendo,W G,Legendary Creature - Human Student,Uncommon,reach;pump hand size,Big Fist
+Tetsutetsu Tetsutetsu,R,Legendary Creature - Human Student,Uncommon,indestructible;artifact creature,Steel
+Ibara Shiozaki,G W,Legendary Creature - Human Student,Rare,reach;defender;vine tokens,Vines
+Pony Tsunotori,W,Legendary Creature - Human Student,Common,horsemanship;charge,Horn cannon
+Juzo Honenuki,U B,Legendary Creature - Human Student,Uncommon,soften land;swampwalk,Softening
+Kinoko Komori,G B,Legendary Creature - Human Student,Common,fungus tokens;spores,Mushroom
+Setsuna Tokage,G U,Legendary Creature - Human Student,Rare,regenerate;flying parts,Lizard splitter
+Manga Fukidashi,U,Legendary Creature - Human Student,Uncommon,create wall;manifest,Comic quirk
+Yo Shindo,R G,Legendary Creature - Human Student,Uncommon,earthquake effect;stun,Vibrate
+Inasa Yoarashi,R W,Legendary Creature - Human Student,Rare,flying;gust;control winds,Gale Force
+Camie Utsushimi,U,Legendary Creature - Human Student,Uncommon,illusion tokens;goad,Glamour
+Seiji Shishikura,B W,Legendary Creature - Human Student,Uncommon,exile creature;meatball token,Fleshcrafting
+Mirio Togata,W U,Legendary Creature - Human Hero,Mythic,phase out;indestructible;unblockable,Lemillion
+Permeation,W U,Instant,Rare,target phases out;protection from everything,Mirio defense
+Phantom Menace,W,Sorcery,Rare,tap all blockers;unblockable attack,Mirio super move
+Tamaki Amajiki,G U,Legendary Creature - Human Hero,Rare,copy creature stats;food synergy,Suneater
+Chimera Kraken,G U,Instant,Uncommon,tap multiple targets;reach,Tentacle attack
+Nejire Hado,W U,Legendary Creature - Human Hero,Rare,flying;trample;energy counters,Nejire-chan
+Gring Wave,W U,Sorcery,Rare,damage to all opponents;slow,Shockwave
+Sir Nighteye,W U,Legendary Creature - Human Advisor,Rare,scry 3;fateseal;predict,Foresight
+Bubble Girl,U,Legendary Creature - Human Hero,Common,tap target;scent,Bubble quirk
+Fat Gum,W R,Legendary Creature - Human Hero,Rare,absorb damage;release damage,Fat Absorption
+Spear Shield,R W,Instant,Rare,prevent damage;deal damage equal to prevented,Fat Gum counter
+Ryukyu,W G,Legendary Creature - Human Hero,Rare,flying;transform into Dragon,Dragon quirk
+Orca,U B,Legendary Creature - Human Hero,Rare,sonar;stun creatures,Gang Orca
+Manual,W U,Legendary Creature - Human Hero,Common,extinguish fire;heal,Normal Hero
+Thirteen,B W,Legendary Creature - Human Hero,Rare,exile target;black hole effect,Black Hole
+Black Hole,B W,Sorcery,Mythic,exile permanent;controller sacrifices,Ultimate void
+Snipe,R W,Legendary Creature - Human Hero,Uncommon,reach;ping damage,Homing
+Ectoplasm,U B,Legendary Creature - Human Hero,Uncommon,create token copies;blockers,Clones
+Cementoss,W G,Legendary Creature - Human Hero,Uncommon,create walls;fortify land,Cement
+Vlad King,R,Legendary Creature - Human Hero,Uncommon,blood tokens;buff 1-B,Blood control
+Hound Dog,R G,Legendary Creature - Human Hero,Common,menace;tracking,Dog quirk
+Kota Izumi,U,Legendary Creature - Human Child,Common,splash water;protection from fire,Water Gun
+Eri,W,Legendary Creature - Human Child,Mythic,return from graveyard;remove counters,Rewind
+Rewind,W U,Instant,Mythic,exile and return transformed;reset life,Eri power
+Melissa Shield,U,Legendary Creature - Human Artificer,Uncommon,repair artifact;draw,Scientist
+David Shield,U,Legendary Creature - Human Artificer,Rare,buff hero;create equipment,Inventor
+Wolfram,R B,Legendary Creature - Human Villain,Rare,control metal;magnetism,Movie villain
+Nine,W U B R G,Legendary Creature - Human Villain,Mythic,weather control;shield;flying,Movie villain 2
+Flect Turn,U W,Legendary Creature - Human Villain,Rare,reflect damage;hexproof,Reflect
+Lady Nagant,B G,Legendary Creature - Human Villain,Rare,reach;snipe;range,Rifle
+Curator,U,Legendary Creature - Human Villain,Uncommon,control artifact;collector,Villain
+Ending,B W,Legendary Creature - Human Villain,Uncommon,suicide attack;road paint,Endeavor fan
+Hood,B,Creature - Zombie Mutant,Rare,flying;regenerate;evolve,High-End
+Johnny,B,Creature - Zombie Mutant,Common,teleport;small,Nomu
+Magne,R,Legendary Creature - Human Villain,Uncommon,attract artifacts;magnetism,Big Sis
+Giran,B,Legendary Creature - Human Advisor,Common,search villain;broker,Info broker
+Doctor Garaki,B U,Legendary Creature - Human Scientist,Rare,create Nomu;sacrifice,Mad doctor
+Plus Ultra!,W R G,Enchantment,Rare,creatures get +1/+1;haste,Motto
+Go Beyond,W U,Instant,Uncommon,target gets +2/+2 and flying,Motto
+Symbol of Peace Falls,B,Enchantment - Saga,Mythic,chapter 1: destroy legend; chapter 2: fear; chapter 3: rise villains,Kamino event
+Sports Festival,R W,Enchantment - Saga,Rare,tournament;fight mechanics,Arc event
+Forest Camp Attack,B G,Enchantment - Saga,Rare,kidnap;burn forest,Arc event
+Shie Hassaikai Raid,W B,Enchantment - Saga,Rare,dungeon mechanic;rescue,Arc event
+Paranormal Liberation War,B R,Enchantment - Saga,Mythic,massive token war;destruction,Arc event
+Hero License Exam,U W,Enchantment,Uncommon,tap creatures to qualify;draw,Exam
+Internship,W,Sorcery,Common,search library for Hero;put into hand,Training
+Work Studies,W U,Enchantment,Uncommon,pair mechanics;learning,Patrol
+Vigilante Deku,B G,Legendary Creature - Human Hero,Mythic,shroud;trample;loner,Dark Deku arc
+Class 1-A,W U R G,Faction,Rare,legendary synergy;assembly,The class
+Big Three,W U G,Faction,Mythic,search top 3 heroes;synergy,Mirio/Nejire/Tamaki
+Wild Wild Pussycats,G W,Faction,Rare,forest synergy;cat tokens,Rescue team
+Meta Liberation Army,B R,Faction,Rare,swarm;sacrifice for power,Re-Destro army
+Shie Hassaikai,W B,Faction,Rare,sacrifice minions;control,Yakuza
+Quirk Singularity,U R,Enchantment,Mythic,chaos warp effects;random damage,Doomsday theory
+Quirk Awakening,W R G,Enchantment - Aura,Rare,enchanted creature gets +5/+5 and abilities,Evolution
+Trigger Drug,B R,Artifact - Equipment,Uncommon,equipped gets +3/-1;haste,Illegal drug
+Hero Costume,W,Artifact - Equipment,Common,equipped gets +1/+1;vigilance,Suit
+Villain Costume,B,Artifact - Equipment,Common,equipped gets +1/+0;menace,Suit
+All Might Card,W,Artifact,Common,sacrifice to give hope,Collectible
+Deku's Notebook,U,Artifact,Uncommon,tap to study target;scry,Analysis
+UA Barrier,W U,Artifact - Fortification,Rare,prevent damage;lockdown,Defense system

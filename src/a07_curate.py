@@ -357,16 +357,14 @@ def is_near_duplicate(
             return True
     return False
 
+# ... (parte precedente invariata)
 
 def load_curation_params(cfg: Dict[str, Any], logger: logging.Logger) -> Tuple[int, float, Dict[str, int]]:
     """
-    Legge dal config i parametri principali di curation:
-
-      - final_set_size
-      - dedup_threshold
-      - target_counts_rarity
-
-    Applica default sensati se qualcosa manca.
+    Legge dal config i parametri principali di curation.
+    
+    MODIFICA: Imposta final_set_size a 100 di default (hard limit), 
+    indipendentemente dalla somma dei target per rarità.
     """
     curation_cfg = cfg.get("curation", {})
     constants_cfg = cfg.get("constants", {})
@@ -388,24 +386,22 @@ def load_curation_params(cfg: Dict[str, Any], logger: logging.Logger) -> Tuple[i
     for r, v in target_counts_rarity_cfg.items():
         target_counts_rarity[r.lower()] = int(v)
 
-    # final_set_size: se non definito, somma dei target rarity o 100
-    final_set_size = int(curation_cfg.get("final_set_size", 0))
-    if final_set_size <= 0:
-        if target_counts_rarity:
-            final_set_size = sum(target_counts_rarity.values())
-        else:
-            final_set_size = 100
+    # MODIFICA QUI:
+    # Se final_set_size non è definito nel config, usiamo 100 come default fisso.
+    # Non usiamo più "sum(target_counts)" come fallback, perché vogliamo tagliare a 100.
+    final_set_size = int(curation_cfg.get("final_set_size", 100))
 
-    # se target_counts_rarity è vuoto, costruiamo una distribuzione uniforme
+    # Se target_counts_rarity è vuoto, costruiamo una distribuzione uniforme
+    # basata sul final_set_size deciso (100 o quello del config).
     if not target_counts_rarity:
         base = final_set_size // len(rarities_cfg)
         rem = final_set_size % len(rarities_cfg)
         for i, r in enumerate(rarities_cfg):
             target_counts_rarity[r] = base + (1 if i < rem else 0)
 
-    logger.info(f"Final set size: {final_set_size}")
+    logger.info(f"Final set size (Cutoff): {final_set_size}")
     logger.info(f"Dedup threshold: {dedup_threshold}")
-    logger.info(f"Target per rarity: {target_counts_rarity}")
+    logger.info(f"Target massimi per rarity: {target_counts_rarity}")
 
     return final_set_size, dedup_threshold, target_counts_rarity
 
@@ -419,33 +415,32 @@ def select_final_set(
 ) -> List[CandidateCard]:
     """
     Selezione greedy del set finale:
-
-      - scorre i candidati in ordine di score
-      - rispetta i target per rarity
-      - applica dedup name+text con distanza normalizzata
-      - si ferma a final_set_size carte
+      - rispetta i target per rarity (se specificati)
+      - si ferma ESATTAMENTE a final_set_size carte (es. 100).
     """
     accepted: List[CandidateCard] = []
     accepted_texts: List[str] = []  # key_text di riferimento
     rarity_counts: Dict[str, int] = defaultdict(int)
 
     for c in candidates_sorted:
+        # Controllo prioritario: siamo arrivati al limite totale?
+        if len(accepted) >= final_set_size:
+            logger.info(f"Raggiunto il limite massimo del set ({final_set_size}). Interruzione selezione.")
+            break
+
         fields = c.fields
         rarity_raw = fields.get("rarity", "")
         rarity = normalize_rarity(rarity_raw)
         if not rarity:
-            # se manca la rarity, saltiamo (è un caso raro)
-            logger.debug("Carta senza rarity, skip.")
+            # se manca la rarity, saltiamo
             continue
 
         # target per questa rarity
         target_for_r = target_counts_rarity.get(rarity, 0)
-        if target_for_r <= 0:
-            # se non c'è target o è zero, non prendiamo questa rarity
-            continue
-
-        if rarity_counts[rarity] >= target_for_r:
-            # quota per questa rarity piena
+        
+        # Se abbiamo già riempito il bucket per questa rarità, passiamo alla prossima carta
+        # (Nota: se vuoi forzare 100 carte anche sforando le rarità, rimuovi questo if)
+        if target_for_r > 0 and rarity_counts[rarity] >= target_for_r:
             continue
 
         # dedup su name+text
@@ -461,14 +456,11 @@ def select_final_set(
         accepted_texts.append(key_text)
         rarity_counts[rarity] += 1
 
-        if len(accepted) >= final_set_size:
-            break
-
     logger.info(f"Carte accettate nel set finale: {len(accepted)}")
     logger.info(f"Distribuzione rarity nel set finale: {dict(rarity_counts)}")
     return accepted
 
-
+# ... (resto del file invariato)
 # ---------------------------------------------------------------------------
 # Export finale (set + distribuzioni)
 # ---------------------------------------------------------------------------

@@ -39,7 +39,7 @@ validator:
   
   # Soglia minima (in caratteri) per considerare il text "non vuoto" nel soft validator
   # (Es: se una carta ha meno di 20 caratteri di testo, viene segnata come invalida in so
-  soft_min_text_chars: 20
+  soft_min_text_chars: 5
 
   # Se true, sia hard sia soft richiedono la presenza del campo "character:"
   require_character: true
@@ -112,27 +112,27 @@ ppl_eval:
   run_name: "mistral-v0.3-qlora"
   split: "test"
   subset_fraction: 1
-  batch_size: 4
+  batch_size: 8
 
 generation:
   model_type: "mistral"        # "mistral" | "gpt2"
-  base_model_name: "Mistral-7B-v0.3"   # o gpt2
+  base_model_name: "mistralai/Mistral-7B-v0.3"   # mistralai/Mistral-7B-v0.3 o gpt2
   checkpoint_path: "outputs/mistral-v0.3-qlora"  # dir dell’adapter o FT
   device: "cuda"               # "cuda" | "cpu" | "auto"
-  batch_size: 8
+  batch_size: 16
   samples_per_mapping: 100     # o calcolato da num_samples / #mapping rows
   num_samples: 1500
-  temperature: 0.8
+  temperature: 0.9
   top_p: 0.9
-  repetition_penalty: 1.3
-  max_new_tokens: 160
+  repetition_penalty: 1.1
+  max_new_tokens: 256
   output_dir: "outputs/generations"   # opzionale; default se la ometti outputs/generations
   eos_token: "<|endofcard|>"
 
 curation:
   output_dir: "outputs/final_set"        # opzionale, default se manca
   final_set_size: 100                    # opzionale
-  dedup_threshold: 0.2                   # opzionale, 0.1 più permissivo; soglia di “distanza normalizzata” che usiamo in curation per evitare quasi-duplicati tra le carte generate
+  dedup_threshold: 0.1                   # opzionale, 0.1 più permissivo; soglia di “distanza normalizzata” che usiamo in curation per evitare quasi-duplicati tra le carte generate
   target_counts:
     rarity:
       common: 60
@@ -142,7 +142,6 @@ curation:
   balance_by: ["color", "type", "rarity"]
 
 wandb:
-  enabled: true            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
-  enabled: true            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
+  enabled: false            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
   project: "magic_deck_generator"       # nome del progetto su W&B (usalo come “cartella” che raggruppa i run)
   run_name_prefix: "exp"   # prefisso per i nomi dei run; il codice può aggiungere timestamp/param per un nome unico

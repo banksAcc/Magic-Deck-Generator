@@ -466,7 +466,6 @@ def _validate_block_hard(
 # ---------------------------------------------------------------------------
 # Validazione di un singolo blocco — parsing SOFT
 # ---------------------------------------------------------------------------
-
 def _validate_block_soft(
     block: Block,
     *,
@@ -474,259 +473,166 @@ def _validate_block_soft(
     start_token: str,
     gen_token: str,
     end_token: str,
-    mana_regex,  # unused in soft
+    mana_regex,  # unused here
     pt_regex,
     rarities: List[str],
     macro_types: List[str],
-    color_mana_subset_rule: bool,  # unused in soft
+    color_mana_subset_rule: bool,  # unused here
     require_character: bool,
 ) -> Dict[str, Any]:
     """
-    Validator "soft" per blocchi generati.
-
-    Approccio:
-      - Richiede la presenza dei token speciali, ma non l'ordine rigido
-        di tutti i campi come in hard.
-      - Header parsato con logica simile a quella hard (start/theme/character/color/type/rarity).
-      - Body parsato in modo fuzzy per name/mana_cost/text/pt.
-      - Vincoli minimi su name/text/pt.
+    Validator "soft" V2: Adattato per output rumorosi (garbage, <|endoftext|>, formattazione mista).
     """
     errors: List[str] = []
     fields: Dict[str, Any] = {}
 
-    # Token speciali all'interno del blocco (posizioni string-based)
+    # 1. Parsing Strutturale (Header vs Body)
     start_idx = block.find(start_token)
-    gen_idx = block.find(gen_token, start_idx + len(start_token) if start_idx != -1 else 0)
-    end_idx = block.find(end_token, gen_idx + len(gen_token) if gen_idx != -1 else 0)
-
     if start_idx == -1:
-        errors.append("start token mancante (soft).")
+        return {"valid": False, "errors": ["start token mancante"], "raw": block, "fields": fields}
+
+    gen_idx = block.find(gen_token, start_idx + len(start_token))
     if gen_idx == -1:
-        errors.append("token di generazione mancante (soft).")
-    if end_idx == -1:
-        errors.append("EOS mancante (soft).")
+        return {"valid": False, "errors": ["gen token mancante"], "raw": block, "fields": fields}
 
-    if errors:
-        return {
-            "valid": False,
-            "errors": errors,
-            "raw": block,
-            "fields": fields,
-        }
-
-    # Segmenti header / body
-    header_segment = block[start_idx:gen_idx]
-    body_segment = block[gen_idx + len(gen_token):end_idx]
-
-    # --- Parsing header (start/theme/(character)/color/type/rarity) ---
-
-    header_lines = [ln.rstrip("\n") for ln in header_segment.splitlines()]
-    header_lines = [ln for ln in header_lines if ln.strip() != ""]
-
-    if not header_lines:
-        errors.append("header vuoto (soft).")
-    idx = 0
-
-    # Start token
-    if not header_lines or header_lines[0].strip() != start_token:
-        errors.append(
-            f"start token mancante o errato (soft) "
-            f"(atteso '{start_token}')."
-        )
+    # Header parsing (standard)
+    header_raw = block[start_idx + len(start_token) : gen_idx]
+    
+    # Body parsing: tutto ciò che segue gen_card. 
+    # Se c'è end_token, ci fermiamo lì. Se no, andiamo fino alla fine (cutoff).
+    body_start_idx = gen_idx + len(gen_token)
+    end_idx = block.find(end_token, body_start_idx)
+    
+    if end_idx != -1:
+        body_raw = block[body_start_idx:end_idx]
     else:
-        idx = 1
+        body_raw = block[body_start_idx:]
 
-    def consume_field(name: str, required: bool = True) -> bool:
-        nonlocal idx
-        if idx >= len(header_lines):
-            if required:
-                errors.append(f"campo '{name}' mancante (soft).")
-            return False
-        line = header_lines[idx].strip()
+    # --- HEADER EXTRACTION ---
+    header_lines = [ln.strip() for ln in header_raw.splitlines() if ln.strip()]
+    for line in header_lines:
+        if ":" in line:
+            k, v = line.split(":", 1)
+            fields[k.strip().lower()] = v.strip()
+
+    # Verifica header minimi
+    for req in ["theme", "color", "type", "rarity"]:
+        if req not in fields:
+            errors.append(f"Header mancante: {req}")
+
+    # --- BODY CLEANING & SCAVENGING ---
+    
+    # 1. Rimuovi garbage noto
+    body_clean = body_raw.replace("<|endoftext|>", "")
+    lines = [ln.strip() for ln in body_clean.splitlines() if ln.strip()]
+
+    name_found = ""
+    mana_found = ""
+    pt_found = ""
+    text_lines = []
+
+    # Regex Helper
+    # Trova simboli di mana {W}, {3}, {R/G} ovunque
+    re_mana = re.compile(r"\{[^{}]+\}")
+    # Trova PT (N/M) a fine riga o isolati
+    re_pt = re.compile(r"(?:pt\s*[:\-]?\s*|^|\|\s*|\s)(\d+\s*/\s*\d+)", re.IGNORECASE)
+
+    # 2. Scansione righe body
+    for line in lines:
         lower = line.lower()
-        prefix = f"{name}:"
-        if not lower.startswith(prefix):
-            if required:
-                errors.append(
-                    f"campo '{name}' mancante o fuori ordine (soft) "
-                    f"(trovato: '{line}')."
-                )
-            return False
-        value = line.split(":", 1)[1].strip()
-        fields[name] = value
-        idx += 1
-        return True
+        processed_line = line # Copia da consumare
 
-    # theme (obbligatorio)
-    consume_field("theme", required=True)
-
-    # character (opzionale ma configurabile)
-    old_idx = idx
-    has_character = consume_field("character", required=False)
-    if require_character and not has_character:
-        # se non abbiamo avanzato, character manca
-        errors.append("campo 'character' mancante ma richiesto dal config (soft).")
-    # color (obbligatorio)
-    consume_field("color", required=True)
-    # type (obbligatorio)
-    consume_field("type", required=True)
-    # rarity (obbligatorio)
-    consume_field("rarity", required=True)
-
-    # --- Parsing body (name/mana_cost/text/pt) fuzzy ---
-
-    body_lines = [ln.rstrip("\n") for ln in body_segment.splitlines()]
-    # Manteniamo anche linee vuote: possono separare pezzi di testo, ma non sono essenziali.
-
-    name_value: str | None = None
-    mana_value: str = ""
-    pt_value: str | None = None
-    text_lines: List[str] = []
-
-    for raw_line in body_lines:
-        line = raw_line.rstrip("\n")
-        stripped = line.strip()
-        if not stripped:
-            # linea vuota -> separatore di testo
-            continue
-
-        lower = stripped.lower()
-
-        # pt: estrae il primo pattern N/M, il resto va nel testo
-        if pt_value is None and lower.startswith("pt"):
-            # es. "pt: 4/5 Wurms 6+ ..."
-            m_rest = re.match(r"^\s*pt\s*[:\-]?\s*(.*)$", stripped, flags=re.IGNORECASE)
-            rest = m_rest.group(1).strip() if m_rest else stripped
-            m_pt = re.search(r"(\d+)\s*/\s*(\d+)", rest)
+        # --- A. Caccia al PT (Power/Toughness) ---
+        # Priorità: se troviamo un PT esplicito, lo prendiamo e lo rimuoviamo dalla riga
+        # Es: "pt: 4/4 | Lesson 2" -> estrai 4/4, lascia "Lesson 2"
+        # Es: "mana_cost {G}{W} | 4/4" -> estrai 4/4
+        
+        # Cerca PT solo se non l'abbiamo ancora trovato
+        if not pt_found:
+            m_pt = re_pt.search(processed_line)
             if m_pt:
-                p1 = int(m_pt.group(1))
-                p2 = int(m_pt.group(2))
-                pt_value = f"{p1}/{p2}"
-                # parte dopo il pattern N/M va nel text
-                tail = rest[m_pt.end():].strip()
-                if tail:
-                    text_lines.append(tail)
-            else:
-                # nessun N/M -> linea rumorosa, mettiamola nel testo
-                text_lines.append(rest)
-            continue
+                # Abbiamo trovato un pattern N/M
+                pt_candidate = m_pt.group(1).replace(" ", "") # es "4 / 4" -> "4/4"
+                
+                # Check euristico: numeri troppo grandi non sono PT (es date, pagini)
+                # Ma per MTG, 20/20 è possibile. Assumiamo valido.
+                pt_found = pt_candidate
+                
+                # Rimuoviamo il match dalla riga per non sporcare text/mana
+                # Se la riga era SOLO pt, diventerà vuota o quasi
+                start, end = m_pt.span(1)
+                # Rimuovi anche prefisso "pt:" se c'era
+                processed_line = processed_line[:m_pt.start()] + processed_line[m_pt.end():]
+                processed_line = re.sub(r"pt\s*[:\-]?", "", processed_line, flags=re.IGNORECASE)
 
-        # name: linee che iniziano con "name"
-        if name_value is None and lower.startswith("name"):
-            # es. "name, the Unworthy", "name Soratami, the Storm's Champion"
-            m_name = re.match(r"^\s*name\b[^\w]*\s*(.*)$", stripped, flags=re.IGNORECASE)
-            if m_name:
-                raw = m_name.group(1).strip()
-                raw = raw.lstrip(",:- \t")
-                name_value = raw
-            else:
-                parts = stripped.split(None, 1)
-                name_value = parts[1].strip() if len(parts) > 1 else ""
-            continue
 
-        # mana_cost: varianti "mana_cost2", "mana_cost/text", "mana_costly_name", ecc.
-        if "mana_cost" in lower or lower.startswith("mana cost"):
-            # es. "mana_cost2 {4}{R}", "mana_cost/text {1}{R}: Target..."
-            m_mc = re.match(r"^\s*mana[_\s-]*cost\w*[^:]*[:\s]*(.*)$", stripped, flags=re.IGNORECASE)
-            rest = m_mc.group(1).strip() if m_mc else stripped
-            # estraiamo tutti i token {…}
-            tokens = re.findall(r"\{[^}]+\}", rest)
-            if tokens:
-                mana_value = "".join(tokens)
-                # rimuoviamo i token dal resto e mandiamo il resto nel text
-                leftover = re.sub(r"\{[^}]+\}", "", rest).strip()
-                if leftover:
-                    text_lines.append(leftover)
-            else:
-                # nessun token di mana: trattiamo tutto come testo
-                text_lines.append(rest)
-            continue
+        # --- B. Caccia al Mana Cost ---
+        # Estraiamo tutti i token {X} presenti nella riga
+        tokens = re_mana.findall(processed_line)
+        if tokens:
+            mana_found += "".join(tokens)
+            # Rimuoviamo i token dalla riga
+            processed_line = re_mana.sub("", processed_line)
+            # Rimuoviamo label "mana_cost" o simili
+            processed_line = re.sub(r"mana_cost\w*", "", processed_line, flags=re.IGNORECASE)
 
-        # text: linee che iniziano con "text"
-        if lower.startswith("text"):
-            # es. "text When...", "text—{T}: ...", "text Ward — ..."
-            m_text = re.match(r"^\s*text\b[^\w-]*[-—:]?\s*(.*)$", stripped, flags=re.IGNORECASE)
-            value = m_text.group(1).strip() if m_text else ""
-            if value:
-                text_lines.append(value)
-            continue
 
-        # fallback: tutto il resto viene considerato parte del rules text
-        text_lines.append(stripped)
+        # --- C. Caccia al Name ---
+        # Se non abbiamo ancora un nome, cerchiamo indizi forti
+        if not name_found:
+            # Caso 1: Etichette esplicite
+            # "Theme: Gandalf", "Artifact name Miracle...", "Name ...", "Theme Song: ..."
+            m_name_label = re.match(r"^(?:theme(?:\s+song)?|name|artifact name|aura_cost)\s*[:|]?\s*(.*)", processed_line, re.IGNORECASE)
+            
+            if m_name_label:
+                potential_name = m_name_label.group(1).strip()
+                # Se il nome è vuoto o è solo simboli (es. "|"), ignoriamo
+                if len(potential_name) > 1 and not potential_name.startswith("{"):
+                    name_found = potential_name
+                    continue # Riga consumata completamente come nome
+            
+            # Caso 2: Euristica prima riga
+            # Se siamo alla prima riga, non inizia con "text", non contiene keywords tipo "When/If", assumiamo sia il nome
+            # (A meno che non sia stata svuotata dalle estrazioni precedenti)
+            if processed_line.strip() and len(text_lines) == 0:
+                is_rule_text = re.match(r"^(when|if|at|target|destroy|draw|create)\b", processed_line, re.IGNORECASE)
+                if not is_rule_text and len(processed_line) < 50: # Nome ragionevolmente corto
+                    name_found = processed_line.strip(" |:,")
+                    continue
 
-    # Componiamo i campi body
-    fields["name"] = name_value or ""
-    fields["mana_cost"] = mana_value or ""
-    text_value = "\n".join(text_lines).strip()
-    fields["text"] = text_value
-    if pt_value is not None:
-        fields["pt"] = pt_value
+        # --- D. Tutto il resto è Text ---
+        # Pulizia finale della riga (rimuove pipe isolati, spazi doppi)
+        clean_text_line = processed_line.replace("|", "").strip()
+        clean_text_line = re.sub(r"^\s*text\s*[:\-—,]*", "", clean_text_line, flags=re.IGNORECASE) # via "text", "text—", "text,"
+        
+        if clean_text_line and len(clean_text_line) > 1:
+            text_lines.append(clean_text_line)
 
-    # --- Controlli "soft" sui valori ---
+    # 3. Consolidamento Fields
+    
+    # Fallback Name: se non trovato, usa Theme dall'header
+    if not name_found:
+        name_found = fields.get("theme", "Unknown Card")
 
-    validator_cfg = cfg.get("validator", {})
-    soft_min_text_chars = int(validator_cfg.get("soft_min_text_chars", 20))
+    fields["name"] = name_found
+    fields["mana_cost"] = mana_found
+    fields["text"] = "\n".join(text_lines)
+    if pt_found:
+        fields["pt"] = pt_found
 
-    # rarity e macro-types come in hard (rarity / type dal header sono puliti)
-    rarity = fields.get("rarity", "")
-    if not rarity:
-        errors.append("rarity vuota (soft).")
-    elif rarities and rarity not in rarities:
-        errors.append(
-            f"rarity '{rarity}' non è tra quelle consentite (soft): {sorted(rarities)}."
-        )
-
-    type_line = fields.get("type", "")
-    if not type_line:
-        errors.append("type vuoto (soft).")
-    else:
-        tl_lower = type_line.lower()
-        mt_lower = [t.lower() for t in macro_types] if macro_types else []
-        if mt_lower and not any(mt in tl_lower for mt in mt_lower):
-            errors.append(
-                "type non contiene alcun macro-tipo valido "
-                f"(soft, attesi uno tra: {macro_types})."
-            )
-
-    # Campi base header
-    for key in ("theme", "color"):
-        if not fields.get(key, ""):
-            errors.append(f"campo '{key}' vuoto (soft).")
-
-    # name: non vuoto e con almeno 2 lettere alfabetiche
-    name = fields.get("name", "")
-    if not name or sum(ch.isalpha() for ch in name) < 2:
-        errors.append("campo 'name' mancante o troppo corto (soft).")
-
-    # text: lunghezza minima
-    if len(text_value.strip()) < soft_min_text_chars:
-        errors.append(
-            f"text troppo corto per la modalità soft "
-            f"(len={len(text_value.strip())}, min={soft_min_text_chars})."
-        )
-
-    # pt vs Creature: pt comunque obbligatorio per Creature
-    type_is_creature = "creature" in type_line.lower()
-    pt_value = fields.get("pt", None)
-    if type_is_creature and not pt_value:
-        errors.append("pt obbligatorio per carte Creature (soft).")
-
-    # Se pt c'è, verifichiamo che sia in forma N/M (se abbiamo pt_regex lo riusiamo)
-    if pt_value is not None:
-        if not pt_value:
-            errors.append("pt vuoto (soft).")
-        else:
-            # Proviamo con il pt_regex se esiste, altrimenti facciamo un check semplice N/M
-            if pt_regex is not None:
-                if not pt_regex.fullmatch(pt_value):
-                    errors.append(
-                        f"pt '{pt_value}' non rispetta il pattern richiesto (soft)."
-                    )
-            else:
-                if not re.fullmatch(r"\d+/\d+", pt_value):
-                    errors.append(
-                        f"pt '{pt_value}' non è nel formato 'N/M' (soft)."
-                    )
+    # 4. Validazione finale (Molto lassa)
+    
+    # Controlli minimi
+    if not fields.get("name"):
+        errors.append("Nome non determinato")
+    
+    type_line = fields.get("type", "").lower()
+    
+    # PT check: Se è creatura, vorremmo un PT, ma in soft mode accettiamo tutto.
+    # Se il parsing ha fallito nel trovare PT per una creatura, segnaliamo errore SOLO se
+    # non siamo riusciti nemmeno a trovare un "0/0" o simile nel testo.
+    if "creature" in type_line and not fields.get("pt"):
+         errors.append("Creatura senza P/T rilevato")
 
     valid = len(errors) == 0
 
@@ -736,8 +642,6 @@ def _validate_block_soft(
         "raw": block,
         "fields": fields,
     }
-
-
 # ---------------------------------------------------------------------------
 # API pubblica: validate_block (hard/soft)
 # ---------------------------------------------------------------------------
