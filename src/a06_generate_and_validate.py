@@ -359,36 +359,51 @@ def load_model_and_tokenizer(
         model = AutoModelForCausalLM.from_pretrained(checkpoint_path)
         model.resize_token_embeddings(len(tokenizer))
         model.to(device)
-
+        
     elif model_type == "mistral":
-        # Mistral + PEFT Logic (CORRETTA)
+        # Mistral + PEFT Logic (Versione 4-bit per Colab Free)
         try:
-            from peft import PeftModel  # type: ignore
+            from peft import PeftModel
+            from transformers import BitsAndBytesConfig # Necessario per 4-bit
         except ImportError as e:
-            raise ImportError("model_type='mistral' richiede 'pip install peft'.") from e
+            raise ImportError("model_type='mistral' richiede 'pip install peft bitsandbytes'.") from e
 
-        # A. Carichiamo il modello BASE su CPU (System RAM)
-        # FIX: Rimosso device_map="auto". Usiamo low_cpu_mem_usage=True per caricare veloce in RAM.
-        # Questo evita che accelerate crei hook che si rompono col resize.
-        base_model = AutoModelForCausalLM.from_pretrained(
-            base_model_name,
-            torch_dtype=torch.float16, 
-            low_cpu_mem_usage=True,
-            # device_map="auto" RIMOSSO INTENZIONALMENTE
+        # 1. Configurazione 4-bit (Vitale per non crashare la RAM)
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
         )
 
-        # B. Resize (Avviene su CPU, sicuro)
-        if len(tokenizer) > base_model.get_input_embeddings().weight.shape[0]:
-            logger.info(f"Ridimensionamento embeddings modello base a: {len(tokenizer)}")
-            base_model.resize_token_embeddings(len(tokenizer), mean_resizing=False)
+        logger.info(f"Caricamento modello base (4-bit): {base_model_name}")
 
-        # C. Carichiamo l'adapter PEFT
+        # 2. Caricamento Modello con Quantizzazione e Device Map
+        # device_map="auto" è obbligatorio qui per spalmare il modello tra CPU e GPU senza esplodere
+        base_model = AutoModelForCausalLM.from_pretrained(
+            base_model_name,
+            quantization_config=bnb_config,
+            device_map="auto",           # Gestisce la RAM automaticamente
+            low_cpu_mem_usage=True,      # Evita picchi di RAM
+            torch_dtype=torch.float16,
+            token=True                   # Usa il token HF loggato
+        )
+
+        # 3. Resize Token Embeddings
+        # Nota: Con i modelli quantizzati moderni (qLoRA), il resize funziona solitamente
+        # senza dover tenere tutto in CPU.
+        current_vocab_size = base_model.get_input_embeddings().weight.shape[0]
+        if len(tokenizer) > current_vocab_size:
+            logger.info(f"Ridimensionamento embeddings: {current_vocab_size} -> {len(tokenizer)}")
+            base_model.resize_token_embeddings(len(tokenizer))
+
+        # 4. Carichiamo l'adapter PEFT
         logger.info(f"Caricamento pesi LoRA da: {checkpoint_path}")
         model = PeftModel.from_pretrained(base_model, checkpoint_path)
-        
-        # D. Spostiamo su GPU manualmente
-        logger.info(f"Spostamento modello su device: {device}")
-        model.to(device)
+
+        # 5. IMPORTANTE: NON spostare manualmente su device!
+        # model.to(device)  <-- Questo causerebbe errore con device_map="auto" e 4-bit.
+        # Il modello è già dove deve essere.
 
     else:
         raise ValueError(f"generation.model_type non supportato: {model_type}")
