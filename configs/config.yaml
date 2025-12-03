@@ -17,7 +17,7 @@ data:
     shuffle_before_split: true  # quasi sicuramente sì
 
 constants:
-  rarities: ["common", "uncommon", "rare", "mythic"]
+  rarities: ["Common", "Uncommon", "Rare", "Mythic"]
   types: ["Creature", "Instant", "Sorcery", "Enchantment", "Artifact", "Planeswalker", "Land"]
   colors: ["W", "U", "B", "R", "G"]
   regex:

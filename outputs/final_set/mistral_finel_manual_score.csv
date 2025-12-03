@@ -1,4 +1,101 @@
-card_id,score
-1,4
-2,4
-3,0
+card_id,score,notes,name
+1,4.0,"Saga funzionale, punteggio ridotto per il codice sporco 'Cpp_image' nel testo.",A New Master
+257,2.5,"Incantesimo con regole confuse (cast as sorcery), ma effetto di pesca/buff intuibile.",A-Borrowing from the Ancients
+258,2.0,"IP esterno (League of Legends). Meccanicamente è una creatura legale.",A-Jayce, Thinking Machines
+259,2.0,"Costo di mana rotto e link Discord nel testo. Quasi ingiocabile.",A-Neuroplasmic Sutures
+260,2.5,"Regole non valide ('You have haste'), ma l'effetto di creare pedine è chiaro.",A-Plus Ultra!
+261,2.5,"Costo di mana e Kicker molto confusi, ma l'effetto trample/lifelink è usabile.",A-Savage Stomp
+262,4.5,"Effetto 'Goad' funzionante. Bakugo che provoca i mostri è tematico.",A-Shock the Monsters
+263,2.5,"IP errato (Planeswalker Tamiyo invece di Monoma). Costo mana assurdo.",A-Tamiyo, Field Researcher
+264,5.0,"Saga che recupera creature. Flavor villain accettabile.",A-The Search for Morgue Knoll
+265,3.0,"Sorcery che ruba creature. Testo sporco ('agreencard_artist') ma effetto base ok.",A-Wake Up the Fire
+847,4.0,"Testo ridondante ('cast as flash' su Instant), ma funziona come rimozione/protezione.",A-Essence Flux
+848,3.5,"Meccanica Giorno/Notte senza contesto e costo mana strano.",A-Kenichi, the Wishmaker
+849,3.0,"Riferimento a personaggio MTG (Melira), ma abilità di tap creature usabile.",A-Melira, the Master of Kitsune
+850,2.0,"IP esterno (X-Men). Funziona come creatura generica.",A-Mister Sinister
+851,5.5,"Recovery Girl che recupera permanenti. Flavor 'Recovery' buono, costo sporco.",A-Nursy LaPelle, Rookie Rescuer
+852,2.0,"Riferimento a personaggio MTG (Sidar Kondo).",A-Sidar Kondo of Jamuraa
+853,2.0,"IP esterno (Avatar).",Aang, Harmony in Motion
+854,2.0,"IP esterno (Avatar).",Aang, the Last Airbender
+855,2.0,"IP esterno (Final Fantasy).",Aerith Gainsborough
+856,4.5,"Artefatto che interagisce con l'esilio. Meccanica interessante anche se il nome è generico.",Alarming Crystal
+857,3.0,"Token generator. Testo sporco con riferimenti ad altre carte.",Alicia, Captain of the Watch
+858,4.0,"Artefatto con segnalini. Meccanica 'Deed' un po' oscura ma giocabile.",Amber Room
+859,2.5,"Ristampa nome MTG. Costo illeggibile.",Ardent Devotion
+860,2.0,"Riferimento a personaggio MTG (Azami).",Azami, Lady of Winds
+861,2.0,"Riferimento a fazione MTG (Azorius).",Azorius Senate
+862,2.0,"Riferimento a personaggio MTG (Baba Lysaga).",Baba Lysaga
+863,2.0,"Duplicato/Variante carta MTG.",Baba Lysaga, Amulet Hunter
+864,4.0,"Chiede di nominare terre. Meccanica 'vecchia scuola' ma valida.",Bargain
+865,2.0,"IP esterno (Marvel/Doctor Strange).",Baron Mordo, Avenger
+866,2.0,"IP esterno (Marvel/Doctor Doom).",Baron von Doom
+867,4.5,"Haste e segnalini. Yo Shindo (Vibrate) ha senso come creatura rapida.",Bijan, Galvanizing Force
+868,1.5,"IP esterno (Tennista reale). Allucinazione grave.",Bjorn Borg, Tennis Champion
+869,3.0,"Ristampa nome MTG. Costo mana sporco.",Blade of the Bloodchief
+870,2.0,"IP esterno (Blade Runner movie).",Blade-Runner Boots
+871,2.0,"Allucinazione: Ristampa letterale di carta MTG famosa.",Blasphemous Act
+872,4.5,"Instant che salva creatura (finta morte). Nome generico ma effetto utile.",Blast Radius
+873,6.0,"Equipaggiamento villain solido. Crea Zombie 'Decayed'. Flavor corretto.",Bloodblade Culler
+874,2.0,"IP esterno (Signore degli Anelli).",Bree, Loyal Friend
+875,4.0,"Crea pedine che danno mana. Un po' confuso ma giocabile.",Briarhorn Blitz
+876,2.0,"Allucinazione: Ristampa letterale di carta MTG famosa.",Bribery
+1317,5.0,"Artefatto con Flashback variabile. Nome 'Magnifying Glass' strano per All Might, ma effetto ok.",A-Magnifying Glass of Truth
+1318,2.0,"Allucinazione: Ristampa letterale di carta MTG.",A-Mire Triton
+1319,6.5,"Internship. Distribuisce segnalini +1/+1 globali. Ottimo flavor di potenziamento di gruppo.",A-Splendor Morn
+1320,2.0,"IP esterno (Avatar).",Aang, Avatar of Air
+1321,2.0,"IP esterno (Naruto).",Ace Hibana, Shinobi Sniper
+1322,7.0,"Hero Costume semplice ed efficace (+2/+0). Playability alta nel Limited.",Amulet of Courage
+1323,3.5,"Crea pedina spirito. Filler decente.",Aradia, Risen Vanguard
+1324,3.5,"Mitologia cinese. Koji Koda ha abilità animali, questa è un po' fuori tema ma usabile.",Bai Hu, the Black Tortoise
+1325,3.5,"Doppio attacco. Nome generico.",Bianca, Swordswoman
+1326,2.0,"Allucinazione: Ristampa nome MTG.",Blazing Salvo
+1327,2.0,"Allucinazione: Ristampa nome MTG.",Blessed Breath
+1328,2.0,"Allucinazione: Ristampa nome MTG.",Blink of an Eye
+1329,7.5,"Villain Costume. Bonus aggressivo (+3/+0 Trample). Perfetto per un villain.",Bloodstone Axe
+1330,2.0,"Allucinazione: Ristampa nome MTG.",Bludgeon Brawl
+1331,6.5,"Bubble Girl. Effetto di selezione carte (bolle che rivelano). Flavor molto carino.",Bubble Boy, Hero of the Waste
+1332,5.5,"Texas Smash che distrugge artefatti. Flavor di 'distruzione collaterale' accettabile.",Burn Down the House
+1333,2.0,"IP esterno (Simpson).",C. Montgomery Burns
+1334,2.0,"IP esterno (Star Trek).",Captain Jean-Luc Picard
+1335,4.0,"Nomu con Morph. Testo un po' ridondante ma meccanica sorpresa adatta.",Chimeric Mutant
+1336,5.5,"Pony Tsunotori. Pesca carte alla morte di creature. Buon motore di gioco.",Chisato Kadohara
+1337,3.0,"Partner con carta inesistente. Meccanicamente povera.",Chiyo, Friendly Kunoichi
+1338,4.0,"Bubble Girl che crea uccelli? Meccanica un po' scollegata.",Chroma, the Tinker
+1339,4.5,"Rikido Sato. Doppio attacco è buono per 'Sugar Rush', anche se il nome 'Bomber' è strano.",Chu Chu, Bomber Boy
+1340,2.0,"IP esterno (Street Fighter).",Chun-Li, Fearless Warrior
+1341,7.5,"Jet Boots (Cloak). Rende imbloccabile (volo/tech). Flavor eccellente per l'item.",Cloak of Duality
+1342,2.0,"Allucinazione: Ristampa terra MTG.",Cragcrown Pathway
+1343,2.0,"Allucinazione: Ristampa nome MTG.",Crush
+1344,6.0,"Nomu che fa scartare a caso. Effetto di disturbo mentale adatto.",Crypt Ripper
+1345,7.5,"Villain Costume. Flash e scarta carte on-hit. Molto forte e tematico.",Cursed Spear
+1346,6.5,"Villain Costume. Crea Zombie alla morte. Flavor necromantico solido.",Darksteel Sword
+1347,5.5,"Hound Dog. Interazione con scartare carte. Giocabile.",Dash, Kitsune Hero
+1348,8.0,"Villain Costume. Segnalini 'Door' e Menace. Meccanica unica e flavor inquietante molto azzeccato.",Death's Door Key
+1349,2.0,"IP esterno (Spiderman).",Doctor Octavius Octavious
+1350,4.5,"Rikido Sato con Haste. Semplice ma efficace.",Dokku Zolo, Blaster Boy
+1351,2.0,"Allucinazione: Ristampa nome MTG.",Dying Wish
+1352,7.0,"Jet Boots. Nome creatura per un equip, ma l'effetto (+2/+0 Volare) è perfetto.",Eager Skyhawk
+1353,2.0,"Allucinazione: Ristampa nome MTG.",Feed the Swarm
+1354,2.0,"Allucinazione: Ristampa nome MTG.",Festering Ghoul
+1355,5.5,"Internship. Guadagna vita e crea Indizio. Buon flavor di investigazione.",Fetch the Sickle
+1356,2.0,"Allucinazione: Ristampa nome MTG.",Fiery Conclusion
+1357,4.5,"Giran. Trigger sul cimitero avversario. Un po' di nicchia ma tematico (info broker).",Fircroft, the Watcher
+1358,2.0,"Allucinazione: Ristampa nome MTG.",Flame Burst
+1359,8.0,"Koji Koda. Cerca terre base (natura). Flavor animale molto coerente.",Foo-Foo, Tiny Ninja Pup
+1360,8.0,"Forest Training Camp. Cerca Foreste. Land molto solida e tematica.",Forest of Legends
+1361,4.0,"Tap e loyalty counters. Meccanica strana per una non-planeswalker.",Fractured Loyalties
+1362,2.0,"Allucinazione: Ristampa terra MTG.",Fungal Reaches
+1363,2.0,"Allucinazione: Ristampa nome MTG.",Galvanic Bombardment
+1364,2.0,"Allucinazione: Ristampa artefatto famoso MTG.",Gilded Lotus
+1365,7.0,"Nomu. Deathtouch e pedina alla morte. Ottimo bloccante difensivo.",Gloomskite
+1366,7.0,"Nomu. Punisce l'avversario (vita o scarta). Villain classico.",Gnawing Ghoul
+1367,2.0,"Allucinazione: Ristampa nome MTG.",Goblin Glider
+1368,6.5,"Villain Costume. Menace e buff. Nome aggressivo adatto.",Grasping Fleshjack
+1369,7.0,"Heartbeat Distortion. Scarta carte a caso. Effetto di confusione mentale azzeccato.",Grim Revelation
+1370,2.0,"IP esterno (Simpson).",Hank Scorpio, Evil Genius
+1371,4.5,"Giran. Mill e pesca. Utile in mazzi controllo.",Hegel, Ambassador of Discord
+1372,6.0,"Internship. Rivela aure. Flavor di preparazione/supporto.",Hidden Motive
+1373,2.0,"Allucinazione: Ristampa nome MTG.",Hidden Strings
+1374,2.0,"IP esterno (Testo cita Pokemon).",Hiro, the Acolyte
+1375,4.5,"Kinoko Komori. Cerca terre. Ramp generico.",Hiroshi, Hero of the Games
+1376,2.0,"IP esterno (Doraemon/Pokemon).",Hiyoko-chan

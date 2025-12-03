@@ -14,7 +14,7 @@ def plot_pass_rate():
     # Dati forniti
     total_generated = 1500
     gpt2_pass_rate = 92.24  # in %
-    mistral_pass_rate = 16.98 # in %
+    mistral_pass_rate = 99.99 # in %
 
     # Calcolo dei numeri assoluti
     gpt2_valid_count = int(total_generated * (gpt2_pass_rate / 100))
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     # 2. Configura i percorsi ed esegui il secondo grafico
     # --- MODIFICA QUI SOTTO CON I TUOI PERCORSI ---
     file_path_gpt2 = "outputs/generations/gpt_batch_20251203_183115_validated.jsonl" 
-    file_path_mistral = "outputs/generations/gpt_batch_20251203_183115_validated_copy.jsonl"
+    file_path_mistral = "outputs/generations/mistrlai_batch_20251203_220512_validated.jsonl"
     
     # Nota: Se non hai i file ora, questa funzione stamperà un errore di "File non trovato"
     # ma il codice è corretto per quando avrai i file.

@@ -142,7 +142,7 @@ def plot_grouped_bar(df, column, title, xlabel, custom_order=None):
 if __name__ == "__main__":
 
     path_gpt2 = "outputs/generations/gpt_batch_20251203_183115_validated.jsonl" 
-    path_mistral = "outputs/generations/gpt_batch_20251203_183115_validated_copy.jsonl"
+    path_mistral = "outputs/generations/mistrlai_batch_20251203_220512_validated.jsonl"
     
     print("Elaborazione dati in corso...")
     df_gpt = load_clean_data(path_gpt2, "GPT-2")
