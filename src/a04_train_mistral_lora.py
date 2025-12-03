@@ -410,7 +410,7 @@ def main() -> None:
     _maybe_add("num_train_epochs", num_epochs)
     _maybe_add("warmup_steps", warmup_steps)
     _maybe_add("warmup_ratio", warmup_ratio_arg)
-    _maybe_add("logging_steps", max(1, eval_every // 5))
+    _maybe_add("logging_steps", max(1, eval_every // 50))
     _maybe_add("save_steps", save_every)
     _maybe_add("save_total_limit", 3)
     _maybe_add("report_to", report_to)

@@ -3,7 +3,7 @@ data:
   raw_path: data/raw/scryfall.json
   processed_dir: data/processed
   language: "en"
-  seq_len: 384 # 512 o 256
+  seq_len: 256 # 512 o 256
   layouts_allowed: ["normal"]
   exclude_complex_layouts: true
   special_tokens:
@@ -50,10 +50,10 @@ validator:
   mode_generation: "soft"
 
 training:
-  subset_fraction: 0.02   # usa solo 10% del set di train e validation
+  subset_fraction: 1   # usa solo 10% del set di train e validation
   eval_every_n_steps: 500
-  save_every_n_steps: 1000
-  run_name_prefix: "test_1" #prefisso del run
+  save_every_n_steps: 3000
+  run_name_prefix: "gpt-new" #prefisso del run
   gpt2:
     model_name: "gpt2"
     mode: "full"
@@ -109,19 +109,19 @@ training:
     optim: "paged_adamw_8bit"
 
 ppl_eval:
-  run_name: "test_1-gpt2"
+  run_name: "gpt-test_completo-gpt2"
   split: "test"
-  subset_fraction: 0.02
+  subset_fraction: 1
   batch_size: 4
 
 generation:
   model_type: "gpt2"        # "mistral" | "gpt2"
   base_model_name: "gpt2"   # o gpt2
-  checkpoint_path: "outputs/test_full_data-gpt2"  # dir dell’adapter o FT
+  checkpoint_path: "outputs/gpt-new-gpt2"  # dir dell’adapter o FT
   device: "cuda"               # "cuda" | "cpu" | "auto"
   batch_size: 8
   samples_per_mapping: 100     # o calcolato da num_samples / #mapping rows
-  num_samples: 1500
+  num_samples: 150
   temperature: 0.8
   top_p: 0.9
   repetition_penalty: 1.1
@@ -142,6 +142,6 @@ curation:
   balance_by: ["color", "type", "rarity"]
 
 wandb:
-  enabled: false            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
+  enabled: true            # true = attiva il logging; false = disattiva (il codice salta l'inizializzazione W&B)
   project: "magic_deck_generator"       # nome del progetto su W&B (usalo come “cartella” che raggruppa i run)
   run_name_prefix: "exp"   # prefisso per i nomi dei run; il codice può aggiungere timestamp/param per un nome unico

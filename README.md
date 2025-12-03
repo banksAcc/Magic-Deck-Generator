@@ -112,3 +112,9 @@ python -m src.a04_train_gpt2 --> fai il training del modello selezionato (quindi
 python -m src.a05_eval_ppl 
 
 python -m src.a06_generate_and_validate --> misura quanto “bene” il modello ha imparato il nostro formato di carte, usando la metrica di Perplexity (PPL)
+
+
+python chart/chaper_5_chart.py  --input data/processed/train.txt --output-dir outputs/figures_train --tokenizer gpt2
+
+python chart/chaper_6_chart.py --ppl-compare logs/ppl_compare_example.csv --ppl-vs-valid logs/ppl_vs_valid_example.csv --output-dir outputs/figures_train
+

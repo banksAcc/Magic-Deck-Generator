@@ -1,0 +1,3 @@
+model,perplexity
+gpt2-small, 2.3908302300699877
+mistral-7b-qlora,0

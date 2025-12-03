@@ -2,3 +2,5 @@ pyyaml
 wandb
 torch
 transformers
+peft
+sentencepiece
