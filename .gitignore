@@ -206,15 +206,10 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-
-
-#Ignore for the project - Manual Added
-
-#non caricare il dataset, circa 2.6gb di dati.
-
-
 #non commitiamo i report di wandb
 wandb
 
 #non includiamo i pesi e i modelli nel repository git, non sono necessari e sono molto pesanti
-outputs
+
+gpt2
+mistral-v0.3-qlora
