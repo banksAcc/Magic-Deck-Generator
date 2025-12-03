@@ -305,7 +305,6 @@ def _resolve_device(device_str: str) -> torch.device:
     # fallback robusto
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
 def load_model_and_tokenizer(
     cfg: Dict[str, Any],
     runtime: Dict[str, Any],
@@ -313,16 +312,10 @@ def load_model_and_tokenizer(
 ) -> Tuple[Any, Any, torch.device, int]:
     """
     Carica modello + tokenizer per la generazione.
-
-    Config:
-      generation.model_type: "gpt2" | "mistral"
-      generation.base_model_name
-      generation.checkpoint_path
-      generation.device
-      generation.eos_token
-
-    Usa gli special tokens dal config (get_special_tokens) e l'end_token
-    dal runtime validator per derivare l'eos_token_id.
+    FIX: Resize degli embeddings prima di caricare l'adapter PEFT.
+    FIX 2: mean_resizing=False per evitare crash con device_map="auto" (meta tensors).
+    FIX 3: Rimosso device_map="auto" dal caricamento base. Si carica su CPU, si resize, 
+           poi si sposta su GPU. Questo evita il KeyError 'lm_head' causato da accelerate.
     """
     gen_cfg = cfg.get("generation", {})
     model_type = gen_cfg.get("model_type", "gpt2").lower()
@@ -333,58 +326,79 @@ def load_model_and_tokenizer(
     if not base_model_name:
         raise ValueError("generation.base_model_name deve essere impostato in config.yaml")
 
-    # Tokenizer
+    # --- 1. TOKENIZER ---
     logger.info(f"Caricamento tokenizer da base_model_name={base_model_name}")
     tokenizer = AutoTokenizer.from_pretrained(base_model_name, use_fast=True)
 
-    # special tokens (start/gen/end)
+    # Aggiunta special tokens (start/gen/end)
     special_tokens = get_special_tokens(cfg)
     if special_tokens:
-        tokenizer.add_special_tokens({"additional_special_tokens": special_tokens})
+        num_added = tokenizer.add_special_tokens({"additional_special_tokens": special_tokens})
+        if num_added > 0:
+            logger.info(f"Aggiunti {num_added} token speciali al tokenizer. Nuova len: {len(tokenizer)}")
 
-    # gestiamo pad_token (per GPT-2 spesso coincide con eos)
+    # Gestione pad_token
     if tokenizer.pad_token is None:
-        # proviamo a usare eos_token del tokenizer, altrimenti end_token da runtime
         if tokenizer.eos_token is not None:
             tokenizer.pad_token = tokenizer.eos_token
         else:
             tokenizer.add_special_tokens({"pad_token": runtime["end_token"]})
+    
+    # Mistral preferisce padding a sinistra per la generazione
+    if model_type == "mistral":
+        tokenizer.padding_side = "left"
 
-    # Modello
+    # --- 2. MODELLO ---
     logger.info(
         f"Caricamento modello (type={model_type}) "
         f"da checkpoint={checkpoint_path} (base={base_model_name}), device={device}"
     )
 
     if model_type == "gpt2":
-        # Assumiamo che checkpoint_path punti a un modello HF già finetunato
+        # GPT-2 Logic (Invariata)
         model = AutoModelForCausalLM.from_pretrained(checkpoint_path)
         model.resize_token_embeddings(len(tokenizer))
+        model.to(device)
 
     elif model_type == "mistral":
-        # Caso Mistral + (eventuale) LoRA. Se è stato usato PEFT, carichiamo l'adapter.
+        # Mistral + PEFT Logic (CORRETTA)
         try:
             from peft import PeftModel  # type: ignore
         except ImportError as e:
-            raise ImportError(
-                "model_type='mistral' richiede il pacchetto 'peft' installato "
-                "(pip install peft)."
-            ) from e
+            raise ImportError("model_type='mistral' richiede 'pip install peft'.") from e
 
+        # A. Carichiamo il modello BASE su CPU (System RAM)
+        # FIX: Rimosso device_map="auto". Usiamo low_cpu_mem_usage=True per caricare veloce in RAM.
+        # Questo evita che accelerate crei hook che si rompono col resize.
         base_model = AutoModelForCausalLM.from_pretrained(
             base_model_name,
+            torch_dtype=torch.float16, 
+            low_cpu_mem_usage=True,
+            # device_map="auto" RIMOSSO INTENZIONALMENTE
         )
+
+        # B. Resize (Avviene su CPU, sicuro)
+        if len(tokenizer) > base_model.get_input_embeddings().weight.shape[0]:
+            logger.info(f"Ridimensionamento embeddings modello base a: {len(tokenizer)}")
+            base_model.resize_token_embeddings(len(tokenizer), mean_resizing=False)
+
+        # C. Carichiamo l'adapter PEFT
+        logger.info(f"Caricamento pesi LoRA da: {checkpoint_path}")
         model = PeftModel.from_pretrained(base_model, checkpoint_path)
-        model.resize_token_embeddings(len(tokenizer))
+        
+        # D. Spostiamo su GPU manualmente
+        logger.info(f"Spostamento modello su device: {device}")
+        model.to(device)
+
     else:
         raise ValueError(f"generation.model_type non supportato: {model_type}")
 
-    model.to(device)
     model.eval()
 
-    # EOS token id
+    # --- 3. EOS TOKEN ID ---
     eos_token_str = gen_cfg.get("eos_token", runtime["end_token"])
     eos_token_id = tokenizer.convert_tokens_to_ids(eos_token_str)
+    
     if eos_token_id == tokenizer.unk_token_id:
         logger.warning(
             f"eos_token '{eos_token_str}' non trovato nel vocab "
@@ -392,10 +406,9 @@ def load_model_and_tokenizer(
         )
 
     logger.info(
-        f"Modello caricato su device={device}, eos_token={eos_token_str} (id={eos_token_id})"
+        f"Modello pronto su device={model.device}, eos_token={eos_token_str} (id={eos_token_id})"
     )
-    return model, tokenizer, device, eos_token_id
-
+    return model, tokenizer, model.device, eos_token_id
 
 # ---------------------------------------------------------------------------
 # Helpers: generazione, post-process, salvataggio

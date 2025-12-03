@@ -109,19 +109,19 @@ training:
     optim: "paged_adamw_8bit"
 
 ppl_eval:
-  run_name: "gpt-test_completo-gpt2"
+  run_name: "mistral-v0.3-qlora"
   split: "test"
   subset_fraction: 1
   batch_size: 4
 
 generation:
-  model_type: "gpt2"        # "mistral" | "gpt2"
-  base_model_name: "gpt2"   # o gpt2
-  checkpoint_path: "outputs/gpt-new-gpt2"  # dir dell’adapter o FT
+  model_type: "mistral"        # "mistral" | "gpt2"
+  base_model_name: "Mistral-7B-v0.3"   # o gpt2
+  checkpoint_path: "outputs/mistral-v0.3-qlora"  # dir dell’adapter o FT
   device: "cuda"               # "cuda" | "cpu" | "auto"
   batch_size: 8
   samples_per_mapping: 100     # o calcolato da num_samples / #mapping rows
-  num_samples: 150
+  num_samples: 1500
   temperature: 0.8
   top_p: 0.9
   repetition_penalty: 1.1

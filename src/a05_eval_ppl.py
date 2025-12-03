@@ -3,28 +3,7 @@
 a05_eval_ppl.py
 
 Valutazione di un modello di language modeling causale (perplexity).
-
-- Carica un modello CausalLM (es. GPT-2, Mistral, ecc.) da outputs/<run_name>,
-  dove il run_name è definito nel file di configurazione.
-- Legge uno split validato (train/val/test)_validated.jsonl.
-- Usa solo i record con "valid": true e il campo "raw" come testo.
-- Costruisce un Dataset e calcola:
-    - eval_loss
-    - perplexity = exp(eval_loss)
-- Stampa le metriche a log e le salva in un file JSON
-  nella cartella di evaluation (es. outputs/<run_name>/eval_test/ppl_test.json).
-
-Tutta la configurazione viene da config.yaml, sezione `ppl_eval`:
-
-    ppl_eval:
-      run_name: "gpt2-gpt2"
-      split: "test"
-      subset_fraction: 1.0
-      batch_size: 4
-
-Esecuzione tipica (con config di default):
-
-    python -m src.a05_eval_ppl
+FIX: Supporto per modelli QLoRA/PEFT con token embeddings ridimensionati.
 """
 
 from __future__ import annotations
@@ -47,6 +26,13 @@ from transformers import (
     TrainingArguments,
     DataCollatorForLanguageModeling,
 )
+
+# Import necessario per gestire gli adapter QLoRA
+try:
+    from peft import PeftModel, PeftConfig
+except ImportError:
+    PeftModel = None
+    PeftConfig = None
 
 from .a00_utils import load_config
 
@@ -75,13 +61,6 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 def read_validated_blocks(path: Path, logger: logging.Logger) -> List[Block]:
-    """
-    Legge un file *.jsonl prodotto dal validator (es. test_validated.jsonl)
-    e ritorna una lista di blocchi di testo (field 'raw').
-
-    - Usa solo i record con "valid": true.
-    - Ignora eventuali record senza 'raw' valido.
-    """
     if not path.is_file():
         raise FileNotFoundError(f"File JSONL non trovato: {path}")
 
@@ -120,12 +99,6 @@ def apply_subset_fraction(
     label: str,
     logger: logging.Logger,
 ) -> List[Block]:
-    """
-    Applica subset_fraction a un singolo split (train/val/test).
-
-    - Se subset_fraction è None: usa tutti i blocchi.
-    - Se subset_fraction in (0,1]: usa quella frazione (arrotondata almeno a 1).
-    """
     n = len(blocks)
     if n == 0:
         logger.warning(f"{label}: dataset vuoto prima del subset.")
@@ -154,11 +127,6 @@ def apply_subset_fraction(
 # ---------------------------------------------------------------------------
 
 class CardDataset(Dataset):
-    """
-    Dataset semplice: ogni esempio è un blocco carta completo.
-    Viene tokenizzato on-the-fly e troncato/paddato a seq_len.
-    """
-
     def __init__(self, blocks: List[Block], tokenizer, seq_len: int):
         self.blocks = blocks
         self.tokenizer = tokenizer
@@ -178,7 +146,7 @@ class CardDataset(Dataset):
         )
         input_ids = enc["input_ids"].squeeze(0)
         attention_mask = enc["attention_mask"].squeeze(0)
-        labels = input_ids.clone()  # causal LM: predict next token su tutto
+        labels = input_ids.clone()
 
         return {
             "input_ids": input_ids,
@@ -209,19 +177,11 @@ def main() -> None:
     wandb_cfg = cfg.get("wandb", {})
 
     if not ppl_cfg:
-        raise RuntimeError(
-            "Sezione 'ppl_eval' mancante nel config.yaml. "
-            "Aggiungi qualcosa come:\n"
-            "ppl_eval:\n"
-            "  run_name: \"gpt2-gpt2\"\n"
-            "  split: \"test\"\n"
-            "  subset_fraction: 1.0\n"
-            "  batch_size: 4\n"
-        )
+        raise RuntimeError("Sezione 'ppl_eval' mancante nel config.yaml.")
 
     run_name = ppl_cfg.get("run_name", None)
     if not run_name:
-        raise RuntimeError("ppl_eval.run_name mancante nel config.yaml: specifica il run da valutare.")
+        raise RuntimeError("ppl_eval.run_name mancante nel config.yaml.")
 
     processed_dir = Path(data_cfg.get("processed_dir", "data/processed")).resolve()
     seq_len = int(data_cfg.get("seq_len", 512))
@@ -239,23 +199,14 @@ def main() -> None:
     logger.info(f"Processed:   {processed_dir}")
     logger.info(f"Split:       {split} -> {split_jsonl}")
     logger.info(f"Seq len:     {seq_len}")
-    logger.info(f"Subset frac: {eval_subset_fraction}")
     logger.info(f"Eval batch:  {eval_batch_size}")
 
     if not model_dir.is_dir():
         raise FileNotFoundError(f"Cartella modello non trovata: {model_dir}")
 
-    # ------------------------------------------------------------------ #
-    # W&B opzionale (come negli altri script)
-    # ------------------------------------------------------------------ #
+    # W&B Setup
     if wandb_cfg.get("enabled", False):
         os.environ["WANDB_PROJECT"] = wandb_cfg.get("project", "mtg-mha")
-        entity = wandb_cfg.get("entity")
-        if entity:
-            os.environ["WANDB_ENTITY"] = entity
-        tags = wandb_cfg.get("tags", [])
-        if tags:
-            os.environ["WANDB_TAGS"] = ",".join(tags)
         logger.info("W&B abilitato via HuggingFace Trainer.")
         report_to = ["wandb"]
     else:
@@ -264,7 +215,7 @@ def main() -> None:
         logger.info("W&B disabilitato da config.")
 
     # ------------------------------------------------------------------ #
-    # 1) Lettura blocchi dallo split VALIDATO (solo valid=True)
+    # 1) Lettura blocchi
     # ------------------------------------------------------------------ #
     blocks = read_validated_blocks(split_jsonl, logger=logger)
     blocks = apply_subset_fraction(
@@ -276,26 +227,69 @@ def main() -> None:
     logger.info(f"{split.capitalize()} blocks (used): {len(blocks)}")
 
     if len(blocks) == 0:
-        raise RuntimeError(f"Dataset {split} vuoto dopo il subset: niente da valutare.")
+        raise RuntimeError(f"Dataset {split} vuoto dopo il subset.")
 
     # ------------------------------------------------------------------ #
-    # 2) Caricamento modello & tokenizer dal checkpoint salvato
+    # 2) Caricamento modello & tokenizer (LOGICA FIXATA PER QLORA)
     # ------------------------------------------------------------------ #
     logger.info(f"Carico tokenizer da {model_dir}...")
     tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+        # Mistral preferisce padding a sinistra, ma per evaluation batching va bene anche destra
+        # se usiamo causal masking. Di default Trainer gestisce bene.
 
-    logger.info(f"Carico modello da {model_dir}...")
-    model = AutoModelForCausalLM.from_pretrained(str(model_dir))
+    # Controllo se è un modello PEFT/QLoRA (cerca adapter_config.json)
+    is_peft = (model_dir / "adapter_config.json").exists()
+
+    if is_peft:
+        logger.info("Rilevato adapter PEFT/QLoRA.")
+        if PeftConfig is None:
+            raise ImportError("Libreria 'peft' non trovata. Installa con `pip install peft`.")
+
+        # A. Leggiamo il config per sapere qual è il base model
+        peft_config = PeftConfig.from_pretrained(str(model_dir))
+        base_model_path = peft_config.base_model_name_or_path
+        logger.info(f"Modello base identificato: {base_model_path}")
+
+        # B. Carichiamo il modello BASE su CPU
+        logger.info("Caricamento modello base...")
+        base_model = AutoModelForCausalLM.from_pretrained(
+            base_model_path,
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True,
+            # device_map="auto" NON usato qui per evitare conflitti col resize
+        )
+
+        # C. Resize Embeddings (Cruciale per il fix 32771 vs 32768)
+        current_vocab_size = base_model.get_input_embeddings().weight.shape[0]
+        if len(tokenizer) > current_vocab_size:
+            logger.info(f"Resize embeddings: {current_vocab_size} -> {len(tokenizer)}")
+            base_model.resize_token_embeddings(len(tokenizer), mean_resizing=False)
+
+        # D. Carichiamo l'adapter
+        logger.info(f"Caricamento pesi adapter da {model_dir}...")
+        model = PeftModel.from_pretrained(base_model, str(model_dir))
+
+        # E. Merge opzionale (per evaluation veloce), ma tenerlo separato va bene per il Trainer
+        # Il Trainer sposterà il modello su GPU automaticamente.
+
+    else:
+        logger.info("Caricamento modello standard (Full Finetune o Base)...")
+        model = AutoModelForCausalLM.from_pretrained(
+            str(model_dir),
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True
+        )
+        model.resize_token_embeddings(len(tokenizer))
 
     # ------------------------------------------------------------------ #
-    # 3) Dataset & hyperparametri di evaluation
+    # 3) Dataset
     # ------------------------------------------------------------------ #
     eval_dataset = CardDataset(blocks, tokenizer, seq_len)
 
     # ------------------------------------------------------------------ #
-    # 4) TrainingArguments & Trainer (solo evaluation)
+    # 4) Evaluation con Trainer
     # ------------------------------------------------------------------ #
     output_dir = model_dir / f"eval_{split}"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -308,6 +302,8 @@ def main() -> None:
         report_to=report_to,
         fp16=torch.cuda.is_available(),
         logging_steps=50,
+        # Importante per evitare memory leak durante eval
+        eval_accumulation_steps=10, 
     )
 
     data_collator = DataCollatorForLanguageModeling(
@@ -323,7 +319,7 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------ #
-    # 5) Evaluation: loss + perplexity
+    # 5) Calcolo PPL
     # ------------------------------------------------------------------ #
     logger.info(f"Inizio valutazione su split '{split}'...")
     metrics = trainer.evaluate()
@@ -336,7 +332,7 @@ def main() -> None:
         logger.info(f"{split.capitalize()} loss: {eval_loss:.6f}")
         logger.info(f"{split.capitalize()} perplexity: {ppl:.4f}")
     else:
-        logger.warning("eval_loss non presente nelle metriche, impossibile calcolare PPL.")
+        logger.warning("eval_loss non presente nelle metriche.")
 
     # ------------------------------------------------------------------ #
     # 6) Salvataggio report
