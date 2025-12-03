@@ -211,8 +211,7 @@ __marimo__/
 #Ignore for the project - Manual Added
 
 #non caricare il dataset, circa 2.6gb di dati.
-scryfall.json
-data/
+
 
 #non commitiamo i report di wandb
 wandb
